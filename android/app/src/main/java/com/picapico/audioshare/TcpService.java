@@ -184,10 +184,21 @@ public class TcpService extends Service {
                 audioTrack.flush();
                 audioTrack.play();
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             Log.e(TAG, "play audio error: " + e);
         } finally {
-            if(audioTrack != null) audioTrack.stop();
+            try {
+                stream.close();
+            } catch (Exception e) {
+                Log.e(TAG, "stop stream error: " + e);
+            }
+            try {
+                if(audioTrack != null) {
+                    audioTrack.stop();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "stop audio error: " + e);
+            }
         }
         setPlaying(false);
         if(mListener != null){

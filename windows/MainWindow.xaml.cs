@@ -261,12 +261,12 @@ namespace AudioShare
             try
             {
                 StopTCP();
-                tcpClient = new TcpClient();
                 if (IsUSB)
                 {
                     var receiver = new ConsoleOutputReceiver();
                     await adbClient.ExecuteRemoteCommandAsync("am start -W -n com.picapico.audioshare/.MainActivity", androiDeviceInstance, receiver, CancellationToken.None);
                     adbClient.CreateForward(androiDeviceInstance, "tcp:" + HTTP_PORT, "localabstract:picapico-audio-share", true);
+                    tcpClient = new TcpClient();
                     await tcpClient.ConnectAsync("127.0.0.1", HTTP_PORT);
                 }
                 else
@@ -277,6 +277,7 @@ namespace AudioShare
                     {
                         port = 80;
                     }
+                    tcpClient = new TcpClient();
                     await tcpClient.ConnectAsync(ip, port);
                 }
                 if(tcpClient.Connected)
@@ -543,12 +544,14 @@ namespace AudioShare
             try
             {
                 tcpClient?.Close();
+                tcpClient?.Dispose();
             }
             catch (Exception)
             {
             }
             tcpClient = null;
             tcpStoping = false;
+            SetConnectionStatus(false);
         }
 
         private void OnPropertyChanged(string propertyName)
