@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">音频同享</string>
+    <string name="title">音频同享</string>
+    <string name="connected">已连接</string>
+    <string name="unconnected">未连接</string>
+</resources>
