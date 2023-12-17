@@ -119,6 +119,7 @@ namespace AudioShare
         private void OnNotifyIconClick(object sender, EventArgs e)
         {
             Show();
+            WindowState = WindowState.Normal;
             Activate();
             Topmost = true;
             Topmost = false;
@@ -127,14 +128,24 @@ namespace AudioShare
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
             e.Cancel = true;
+            WindowState = WindowState.Minimized;
             Hide();
         }
 
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            WindowState = WindowState.Minimized;
             RefreshAudioDevices();
             RefreshAndroidDevices();
-            ConnectTCP();
+            await ConnectTCP();
+            if (Connected)
+            {
+                Hide();
+            }
+            else
+            {
+                OnNotifyIconClick(null, null);
+            }
         }
 
         #region Model
@@ -318,7 +329,7 @@ namespace AudioShare
         private WasapiLoopbackCapture waveIn;
         private TcpClient tcpClient;
 
-        private async void ConnectTCP()
+        private async Task ConnectTCP()
         {
             Loading = true;
             try
@@ -478,13 +489,13 @@ namespace AudioShare
             }
         }
 
-        private void Run(object sender, RoutedEventArgs e)
+        private async void Run(object sender, RoutedEventArgs e)
         {
             if (AudioDeviceSelected == null || (AndroidDeviceSelected == null && IsUSB))
             {
                 return;
             }
-            ConnectTCP();
+            await ConnectTCP();
         }
 
         private void Stop(object sender, RoutedEventArgs e)
