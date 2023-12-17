@@ -3,12 +3,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
         xmlns:ui="http://schemas.modernwpf.com/2019"
         xmlns:local="clr-namespace:AudioShare"
         mc:Ignorable="d" WindowStartupLocation="CenterScreen"
         ui:WindowHelper.UseModernWindowStyle="True"
         ui:TitleBar.IsIconVisible="True"
-        Title="{DynamicResource title}" Height="320" Width="500" ResizeMode="NoResize">
+        Title="{DynamicResource title}" Height="360" Width="500" ResizeMode="NoResize">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibility"/>
     </Window.Resources>
@@ -18,45 +19,65 @@
                 <StackPanel Orientation="Horizontal">
                     <ui:ToggleSwitch IsOn="{Binding IsStartup}" Width="40" />
                     <Label Content="{DynamicResource startup}" Margin="5 0 10 0" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                    <ui:ToggleSwitch IsOn="{Binding IsUSB}" Width="40" />
+                    <ui:ToggleSwitch IsOn="{Binding IsUSB}" Width="40" IsEnabled="{Binding UnConnected}"/>
                     <Label Content="USB" Margin="5 0 10 0" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                    <ComboBox Height="23" Width="90" Margin="27 0 0 0" ItemsSource="{Binding SampleRates}"
+                    <ComboBox Height="23" Width="90" Margin="27 0 0 0" ItemsSource="{Binding SampleRates}" IsEnabled="{Binding UnConnected}"
                               VerticalAlignment="Center" VerticalContentAlignment="Center" Padding="8 0 0 0"
                       SelectedValue="{Binding SampleRateSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Border x:Name="ConnectionDot" Width="10" Height="10" Margin="0 0 5 0" Background="Red" CornerRadius="50"/>
-                    <Label x:Name="ConnectionText" Content="{DynamicResource unconnected}" Padding="0 5 0 5" VerticalContentAlignment="Center"/>
+                <StackPanel  Orientation="Horizontal" HorizontalAlignment="Right"
+                             Visibility="{Binding UnConnected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
+                    <Border Width="10" Height="10" Margin="0 0 5 0" Background="Red" CornerRadius="50"/>
+                    <Label Content="{DynamicResource unconnected}" Padding="0 5 0 5" VerticalContentAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                            Visibility="{Binding Connected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
+                    <Border Width="10" Height="10" Margin="0 0 5 0" Background="Green" CornerRadius="50"/>
+                    <Label Content="{DynamicResource connected}" Padding="0 5 0 5" VerticalContentAlignment="Center"/>
                 </StackPanel>
             </Grid>
             <Label Content="{DynamicResource audioDeviceSelection}" Width="400" HorizontalContentAlignment="Left" Padding="0 5 0 5"/>
             <StackPanel Height="30" Width="400" Orientation="Horizontal">
                 <ComboBox Height="30" Width="310" ItemsSource="{Binding AudioDevices}" VerticalContentAlignment="Center"
                       SelectedValue="{Binding AudioDeviceSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                      DisplayMemberPath="Name"/>
-                <Button Height="30" Width="80" Content="{DynamicResource refresh}" Click="RefreshAndroidDevices" Margin="10 0 0 0" Style="{DynamicResource AccentButtonStyle}"/>
+                      DisplayMemberPath="Name" IsEnabled="{Binding UnConnected}"/>
+                <Button Height="30" Width="80" Content="{DynamicResource refresh}" IsEnabled="{Binding UnConnected}"
+                        Click="RefreshAndroidDevices" Margin="10 0 0 0" Style="{DynamicResource AccentButtonStyle}"/>
             </StackPanel>
             <Label Content="{DynamicResource remoteAddressEditor}" Width="400" HorizontalContentAlignment="Left" Padding="0 5 0 5"
                     Visibility="{Binding IsIP, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
-            <TextBox Height="30" MinHeight="10" Width="400" Text="{Binding IPAddress}" ui:ControlHelper.PlaceholderText="127.0.0.1:8088" Padding="10 5"
-                     Visibility="{Binding IsIP, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}" VerticalContentAlignment="Center"/>
+            <TextBox Height="30" MinHeight="10" Width="400" Text="{Binding IPAddress}" IsEnabled="{Binding UnConnected}"
+                     ui:ControlHelper.PlaceholderText="127.0.0.1:8088" Padding="10 5" VerticalContentAlignment="Center"
+                     Visibility="{Binding IsIP, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
             <Label Content="{DynamicResource androidDeviceSelection}" Width="400" HorizontalContentAlignment="Left" Padding="0 5 0 5"
                     Visibility="{Binding IsUSB, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
             <StackPanel Height="30" Width="400" Orientation="Horizontal"
                         Visibility="{Binding IsUSB, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
                 <ComboBox Height="30" Width="310" ItemsSource="{Binding AndroidDevices}" VerticalContentAlignment="Center"
                       SelectedValue="{Binding AndroidDeviceSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                      DisplayMemberPath="Name"/>
-                <Button Height="30" Width="80" Content="{DynamicResource refresh}" Click="RefreshAndroidDevices" Margin="10 0 0 0" Style="{DynamicResource AccentButtonStyle}"/>
+                      DisplayMemberPath="Name" IsEnabled="{Binding UnConnected}"/>
+                <Button Height="30" Width="80" Content="{DynamicResource refresh}" IsEnabled="{Binding UnConnected}"
+                        Click="RefreshAndroidDevices" Margin="10 0 0 0" Style="{DynamicResource AccentButtonStyle}"/>
             </StackPanel>
-            <Button x:Name="ButtonRun" Height="30" Width="400" Click="Run" Margin="0 10 0 0" Style="{DynamicResource AccentButtonStyle}">
+            <StackPanel Orientation="Horizontal">
+                <Label Height="30" Content="{DynamicResource volume}" HorizontalContentAlignment="Left" VerticalContentAlignment="Center" />
+                <ui:ToggleSwitch IsOn="{Binding VolumeFollowSystem}" Width="40" />
+                <Label Content="{DynamicResource followSystem}" Margin="5 0 10 0" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                <Slider Width="210" Maximum="100" IsEnabled="{Binding VolumeCustom}" Value="{Binding Volume}" />
+                <Label Content="{Binding Volume}" VerticalAlignment="Center" HorizontalContentAlignment="Right" Width="25" Margin="10 0 0 0"/>
+            </StackPanel>
+            <Button Height="30" Width="400" Click="Run" Margin="0 10 0 0" Style="{DynamicResource AccentButtonStyle}"
+                     Visibility="{Binding UnConnected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
                 <StackPanel Orientation="Horizontal">
-                    <ui:ProgressRing x:Name="ConnectLoading" IsActive="True" Width="10" Height="10" Foreground="White" Padding="3" Margin="0"/>
+                    <ui:ProgressRing Visibility="{Binding Loading, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}" IsActive="True" Width="10" Height="10" Foreground="White" Padding="3" Margin="0"/>
                     <Label Foreground="White" Content="{DynamicResource connecte}"/>
                 </StackPanel>
             </Button>
-            <Button x:Name="ButtonStop" Visibility="Collapsed" Height="30" Width="400" Content="{DynamicResource disconnecte}" Click="Stop" Margin="0 10 0 0" Style="{DynamicResource AccentButtonStyle}">
+            <Button Height="30" Width="400" Click="Stop" Margin="0 10 0 0"
+                    Content="{DynamicResource disconnecte}" Style="{DynamicResource AccentButtonStyle}"
+                    Visibility="{Binding Connected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
                 <Button.Resources>
                     <SolidColorBrush x:Key="AccentButtonBackground" Color="OrangeRed" Opacity="0.9"/>
                     <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="OrangeRed" Opacity="1"/>
@@ -71,6 +92,6 @@
                 </Button.Resources>
             </Button>
         </StackPanel>
-        <Grid x:Name="GridLoading" Background="#01000000" />
+        <Grid Background="#01000000" Visibility="{Binding Loading, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
     </Grid>
 </Window>

@@ -10,7 +10,9 @@ namespace AudioShare
         public string AndroidId { get; set; } = string.Empty;
         public string IPAddress { get; set; } = "192.168.3.194:8088";
         public int SampleRate { get; set; } = 48000;
+        public int Volume { get; set; } = 50;
         public bool IsUSB { get; set; } = true;
+        public bool VolumeFollowSystem { get; set; } = true;
 
         private static readonly string savePath;
         static Settings()

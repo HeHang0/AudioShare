@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.wifi.WifiInfo;
@@ -46,6 +47,7 @@ public class MainActivity extends AppCompatActivity {
         public void onServiceConnected(ComponentName className, IBinder service) {
             TcpService.TcpBinder binder = (TcpService.TcpBinder) service;
             tcpService = binder.getService();
+            tcpService.setAudioManager((AudioManager)getSystemService(Context.AUDIO_SERVICE));
             tcpService.setMessageListener(messageListener);
             isBound = true;
             setConnectionStatus();

@@ -1,7 +1,6 @@
 ﻿using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using SharpAdbClient;
-using SharpAdbClient.DeviceCommands;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -9,13 +8,13 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
-using System.Text.RegularExpressions;
 using System.Windows;
-using System.Windows.Media;
 using System.Threading;
+using Microsoft.Win32;
+using System.Text;
 using NotifyIcon = System.Windows.Forms.NotifyIcon;
 using DeviceState = NAudio.CoreAudioApi.DeviceState;
-using Microsoft.Win32;
+using System.Threading.Tasks;
 
 namespace AudioShare
 {
@@ -26,11 +25,19 @@ namespace AudioShare
     {
         public event PropertyChangedEventHandler PropertyChanged;
         private const int HTTP_PORT = 32337;
+        private readonly byte[] TCP_HEAD = Encoding.Default.GetBytes("picapico-audio-share");
         private NotifyIcon notifyIcon;
         private ResourceDictionary zhRD;
-        private ResourceDictionary enRD;
+        private ResourceDictionary enRD; 
         private ResourceDictionary currentRD;
-        private Settings settings = Settings.Read();
+        private readonly Settings settings = Settings.Read();
+        enum Command
+        {
+            None = 0,
+            AudioData = 1,
+            Volume = 2,
+            SampleRate = 3
+        }
         public MainWindow()
         {
             InitializeComponent();
@@ -64,14 +71,6 @@ namespace AudioShare
             currentRD = isChinese ? zhRD : enRD;
             Application.Current.Resources.MergedDictionaries.Add(currentRD);
             Application.Current.Resources.MergedDictionaries.Remove(isChinese ? enRD : zhRD);
-            if(ButtonStop.Visibility == Visibility.Visible)
-            {
-                ConnectionText.Content = currentRD["connected"];
-            }
-            else
-            {
-                ConnectionText.Content = currentRD["unconnected"];
-            }
         }
 
         private void SetStartup(bool startup)
@@ -84,7 +83,7 @@ namespace AudioShare
             if (!exists && !startup) return;
             if (startup)
             {
-                ShellLink.Shortcut.CreateShortcut(appPath).WriteToFile(lnkPath);
+                ShellLink.Shortcut.CreateShortcut(appPath, "startup").WriteToFile(lnkPath);
             }
             else
             {
@@ -138,6 +137,8 @@ namespace AudioShare
             ConnectTCP();
         }
 
+        #region Model
+
         public bool IsUSB
         {
             get
@@ -161,6 +162,37 @@ namespace AudioShare
             set
             {
                 settings.IPAddress = value;
+            }
+        }
+
+        public bool VolumeFollowSystem
+        {
+            get
+            {
+                return settings.VolumeFollowSystem;
+            }
+            set
+            {
+                settings.VolumeFollowSystem = value;
+                OnPropertyChanged(nameof(VolumeFollowSystem));
+                OnPropertyChanged(nameof(VolumeCustom));
+                if(value) SyncVolume();
+            }
+        }
+
+        public bool VolumeCustom => !VolumeFollowSystem;
+
+        public int Volume
+        {
+            get
+            {
+                return settings.Volume;
+            }
+            set
+            {
+                settings.Volume = value;
+                OnPropertyChanged(nameof(Volume));
+                SetRemoteVolume();
             }
         }
 
@@ -207,9 +239,9 @@ namespace AudioShare
                 {
                     audioDeviceSelected = value;
                     settings.AudioId = audioDeviceSelected?.ID ?? string.Empty;
+                    CancelVolumeListener();
                     if (audioDeviceSelected == null)
                     {
-                        CancelVolumeListener();
                         audioDeviceInstance = null;
                         return;
                     }
@@ -218,16 +250,17 @@ namespace AudioShare
                     var instance = devices.FirstOrDefault(m => m.ID == audioDeviceSelected.ID);
                     if(instance == null || instance?.ID != audioDeviceInstance?.ID)
                     {
-                        CancelVolumeListener();
                     }
                     audioDeviceInstance = instance;
+                    SyncVolume();
+                    audioDeviceInstance.AudioEndpointVolume.OnVolumeNotification += OnVolumeNotification;
                 }
             }
         }
 
         public ObservableCollection<AudioDevice> AndroidDevices { get; } = new ObservableCollection<AudioDevice>();
 
-        private DeviceData androiDeviceInstance = null;
+        private DeviceData androidDeviceInstance = null;
         private AudioDevice androidDeviceSelected;
         public AudioDevice AndroidDeviceSelected
         {
@@ -243,29 +276,59 @@ namespace AudioShare
                     settings.AndroidId = androidDeviceSelected?.ID ?? string.Empty;
                     if (androidDeviceSelected == null)
                     {
-                        androiDeviceInstance = null;
+                        androidDeviceInstance = null;
                         return;
                     }
-                    androiDeviceInstance = adbClient.GetDevices().FirstOrDefault(m => m.Serial == androidDeviceSelected.ID);
+                    androidDeviceInstance = adbClient.GetDevices().FirstOrDefault(m => m.Serial == androidDeviceSelected.ID);
                 }
             }
         }
+
+        private bool loading = false;
+        public bool Loading
+        {
+            get
+            {
+                return loading;
+            }
+            set
+            {
+                loading = value;
+                OnPropertyChanged(nameof(Loading));
+            }
+        }
+
+        private bool connected = false;
+        public bool Connected
+        {
+            get
+            {
+                return connected;
+            }
+            set
+            {
+                connected = value;
+                OnPropertyChanged(nameof(Connected));
+                OnPropertyChanged(nameof(UnConnected));
+            }
+        }
+        public bool UnConnected => !Connected;
+        #endregion
 
         private WasapiLoopbackCapture waveIn;
         private TcpClient tcpClient;
 
         private async void ConnectTCP()
         {
-            GridLoading.Visibility = Visibility.Visible;
-            ConnectLoading.Visibility = Visibility.Visible;
+            Loading = true;
             try
             {
                 StopTCP();
                 if (IsUSB)
                 {
                     var receiver = new ConsoleOutputReceiver();
-                    await adbClient.ExecuteRemoteCommandAsync("am start -W -n com.picapico.audioshare/.MainActivity", androiDeviceInstance, receiver, CancellationToken.None);
-                    adbClient.CreateForward(androiDeviceInstance, "tcp:" + HTTP_PORT, "localabstract:picapico-audio-share", true);
+                    await adbClient.ExecuteRemoteCommandAsync("am start -W -n com.picapico.audioshare/.MainActivity", androidDeviceInstance, receiver, CancellationToken.None);
+                    adbClient.CreateForward(androidDeviceInstance, "tcp:" + HTTP_PORT, "localabstract:picapico-audio-share", true);
                     tcpClient = new TcpClient();
                     await tcpClient.ConnectAsync("127.0.0.1", HTTP_PORT);
                 }
@@ -282,9 +345,10 @@ namespace AudioShare
                 }
                 if(tcpClient.Connected)
                 {
+                    WriteTcp(TCP_HEAD);
+                    WriteTcp(new byte[] { (byte)Command.AudioData });
                     var sampleRateBytes = BitConverter.GetBytes(settings.SampleRate);
-                    Array.Reverse(sampleRateBytes);
-                    writeTcp(sampleRateBytes);
+                    WriteTcp(sampleRateBytes);
                     StartCapture();
                 }
                 settings.Save();
@@ -294,8 +358,7 @@ namespace AudioShare
                 StopCapture();
                 StopTCP();
             }
-            GridLoading.Visibility = Visibility.Collapsed;
-            ConnectLoading.Visibility = Visibility.Collapsed;
+            Loading = false;
         }
 
         private void StartCapture()
@@ -305,22 +368,10 @@ namespace AudioShare
             waveIn.WaveFormat = new WaveFormat(settings.SampleRate, 16, 2);
             waveIn.DataAvailable += SendAudioData;
             waveIn.StartRecording();
-            SetConnectionStatus(true);
-            if (IsUSB)
-            {
-                audioDeviceInstance.AudioEndpointVolume.OnVolumeNotification += AudioEndpointVolume_OnVolumeNotification;
-                SyncAndroidVolume();
-            }
-        }
-
-        private void SetConnectionStatus(bool connected)
-        {
+            SetRemoteVolume();
             Dispatcher.Invoke(() =>
             {
-                ConnectionDot.Background = connected ? Brushes.Green : Brushes.Red;
-                ConnectionText.Content = connected ? currentRD["connected"] : currentRD["unconnected"];
-                ButtonRun.Visibility = connected ? Visibility.Collapsed : Visibility.Visible;
-                ButtonStop.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+                Connected = true;
             });
         }
 
@@ -328,7 +379,7 @@ namespace AudioShare
         {
             if (e.BytesRecorded > 0)
             {
-                writeTcp(e.Buffer, e.BytesRecorded);
+                WriteTcp(e.Buffer, e.BytesRecorded);
             }
         }
 
@@ -338,7 +389,7 @@ namespace AudioShare
             {
                 try
                 {
-                    audioDeviceInstance.AudioEndpointVolume.OnVolumeNotification -= AudioEndpointVolume_OnVolumeNotification;
+                    audioDeviceInstance.AudioEndpointVolume.OnVolumeNotification -= OnVolumeNotification;
                 }
                 catch (Exception)
                 {
@@ -346,59 +397,74 @@ namespace AudioShare
             }
         }
 
-        private void AudioEndpointVolume_OnVolumeNotification(AudioVolumeNotificationData data)
+        private void OnVolumeNotification(AudioVolumeNotificationData data)
         {
-            SyncAndroidVolume();
+            SyncVolume();
         }
 
-        private bool synchronizing = false;
-        private async void SyncAndroidVolume()
+        private void SyncVolume()
         {
-            if (synchronizing || androiDeviceInstance == null || audioDeviceInstance == null)
+            if (audioDeviceInstance == null || VolumeCustom)
             {
                 return;
             }
-            synchronizing = true;
-            var receiver = new ConsoleOutputReceiver();
-            await adbClient.ExecuteRemoteCommandAsync("dumpsys audio | grep -A 6 STREAM_MUSIC", androiDeviceInstance, receiver, CancellationToken.None);
-            var output = receiver.ToString();
-            Regex maxRegex = new Regex(@"Max:[\s]*([\d]+)");
-            Match maxMatch = maxRegex.Match(output);
-            int maxVolume = 10;
-            if (maxMatch.Success)
+            Volume = (int)(audioDeviceInstance.AudioEndpointVolume.MasterVolumeLevelScalar * 100);
+        }
+
+        private CancellationTokenSource SetRemoteVolumeCancel = null;
+        private async void SetRemoteVolume()
+        {
+            SetRemoteVolumeCancel?.Cancel();
+            SetRemoteVolumeCancel = new CancellationTokenSource();
+            CancellationToken token = SetRemoteVolumeCancel.Token;
+            await Task.Delay(200);
+            if (token.IsCancellationRequested) return;
+            byte[] volumeBytes = BitConverter.GetBytes(Volume);
+            RequestTcp(Command.Volume, volumeBytes);
+        }
+
+        private async void RequestTcp(Command command, byte[] data)
+        {
+            if (UnConnected) return;
+            TcpClient client = new TcpClient();
+            try
             {
-                int.TryParse(maxMatch.Groups[1].Value, out maxVolume);
-            }
-            int currentVolume = 10;
-            Regex currentRegex = new Regex(@"streamVolume:[\s]*([\d]+)");
-            Match currentMatch = currentRegex.Match(output);
-            if (currentMatch.Success)
-            {
-                int.TryParse(currentMatch.Groups[1].Value, out currentVolume);
-            }
-            else
-            {
-                currentRegex = new Regex(@"Current[\s\S]+\(spdif\):[\s]*([\d]+)");
-                currentMatch = currentRegex.Match(output);
-                if (currentMatch.Success)
+                if (IsUSB)
                 {
-                    int.TryParse(currentMatch.Groups[1].Value, out currentVolume);
+                    await client.ConnectAsync("127.0.0.1", HTTP_PORT);
                 }
+                else
+                {
+                    var addressArr = IPAddress.Split(':');
+                    string ip = addressArr.FirstOrDefault()?.Trim() ?? string.Empty;
+                    if (!int.TryParse(addressArr.LastOrDefault()?.Trim() ?? string.Empty, out int port))
+                    {
+                        port = 80;
+                    }
+                    await client.ConnectAsync(ip, port);
+                }
+                client.GetStream().Write(TCP_HEAD, 0, TCP_HEAD.Length);
+                client.GetStream().Write(new byte[] { (byte)command }, 0, 1);
+                client.GetStream().Write(data, 0, data.Length);
+                await client.GetStream().FlushAsync();
+                await Task.Delay(1000);
             }
-            int volumeSet = (int)(audioDeviceInstance.AudioEndpointVolume.MasterVolumeLevelScalar * maxVolume);
-            if (currentVolume == volumeSet)
+            catch (Exception)
             {
-                synchronizing = false;
-                return;
             }
-            string command = $"input keyevent KEYCODE_VOLUME_{(currentVolume > volumeSet ? "DOWN" : "UP")}";
-            var commandArray = Enumerable.Repeat(command, Math.Abs(currentVolume - volumeSet));
-            var receiver1 = new ConsoleOutputReceiver();
-            adbClient.ExecuteShellCommand(androiDeviceInstance, string.Join(" && ", commandArray), receiver1);
-            synchronizing = false;
+            try
+            {
+                client.Close();
+                client.Dispose();
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }
         }
 
-        private void writeTcp(byte[] buffer, int length=0)
+        private void WriteTcp(byte[] buffer, int length=0)
         {
             if (length == 0) length = buffer.Length;
             try
@@ -517,8 +583,6 @@ namespace AudioShare
         {
             if (captureStoping) return;
             captureStoping = true;
-            SetConnectionStatus(false);
-            CancelVolumeListener();
             try
             {
                 if(waveIn != null)
@@ -532,6 +596,10 @@ namespace AudioShare
             {
                 Trace.WriteLine("Stop Recording Error: " + ex.Message);
             }
+            Dispatcher.Invoke(() =>
+            {
+                Connected = false;
+            });
             waveIn = null;
             captureStoping = false;
         }
@@ -551,7 +619,10 @@ namespace AudioShare
             }
             tcpClient = null;
             tcpStoping = false;
-            SetConnectionStatus(false);
+            Dispatcher.Invoke(() =>
+            {
+                Connected = false;
+            });
         }
 
         private void OnPropertyChanged(string propertyName)
