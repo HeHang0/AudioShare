@@ -15,6 +15,8 @@ using System.Text;
 using NotifyIcon = System.Windows.Forms.NotifyIcon;
 using DeviceState = NAudio.CoreAudioApi.DeviceState;
 using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.IO.Packaging;
 
 namespace AudioShare
 {
@@ -136,7 +138,7 @@ namespace AudioShare
         {
             WindowState = WindowState.Minimized;
             RefreshAudioDevices();
-            RefreshAndroidDevices();
+            await RefreshAndroidDevices();
             await ConnectTCP();
             if (Connected)
             {
@@ -309,6 +311,23 @@ namespace AudioShare
             }
         }
 
+        private bool adbLoading = false;
+        public bool AdbLoading
+        {
+            get
+            {
+                return adbLoading;
+            }
+            set
+            {
+                adbLoading = value;
+                OnPropertyChanged(nameof(AdbLoading));
+                OnPropertyChanged(nameof(IsAndroidDevicesEnabled));
+            }
+        }
+
+        public bool IsAndroidDevicesEnabled => !AdbLoading && UnConnected;
+
         private bool connected = false;
         public bool Connected
         {
@@ -321,6 +340,7 @@ namespace AudioShare
                 connected = value;
                 OnPropertyChanged(nameof(Connected));
                 OnPropertyChanged(nameof(UnConnected));
+                OnPropertyChanged(nameof(IsAndroidDevicesEnabled));
             }
         }
         public bool UnConnected => !Connected;
@@ -539,47 +559,84 @@ namespace AudioShare
         }
 
 
-        private void RefreshAndroidDevices(object sender, RoutedEventArgs e)
+        private async void RefreshAndroidDevices(object sender, RoutedEventArgs e)
         {
-            RefreshAndroidDevices();
+            await RefreshAndroidDevices();
         }
         AdbClient adbClient = new AdbClient();
-        private void RefreshAndroidDevices()
+        private async Task RefreshAndroidDevices()
         {
-            AdbServer server = new AdbServer();
+            if (AdbLoading) return;
             string adbPath = FindAdbPath();
             if (string.IsNullOrWhiteSpace(adbPath))
             {
                 return;
             }
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = adbPath,
+                Arguments = "devices",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+            };
+            AdbLoading = true;
+            Process process = new Process
+            {
+                StartInfo = startInfo,
+                EnableRaisingEvents = true
+            };
+            var completionSource = new TaskCompletionSource<int>();
+            process.Exited += (sender, args) =>
+            {
+                completionSource.SetResult(process.ExitCode);
+                process.Dispose();
+            };
+            if (process.Start())
+            {
+                await completionSource.Task;
+            }
+
+            AdbServer server = new AdbServer();
             var result = server.StartServer(adbPath, restartServerIfNewer: false);
             if (result == StartServerResult.RestartedOutdatedDaemon)
             {
+                Dispatcher.Invoke(() =>
+                {
+                    AdbLoading = false;
+                });
                 return;
             }
-
-            AndroidDevices.Clear();
-            var devices = adbClient.GetDevices();
-            foreach (var device in devices)
+            Dispatcher.Invoke(() =>
             {
-                AndroidDevices.Add(new AudioDevice(device.Serial, $"{device.Name} {device.Model}"));
-            }
-            AndroidDeviceSelected = AndroidDevices.FirstOrDefault(m => m.ID == settings.AndroidId);
-            if (AndroidDeviceSelected == null)
-            {
-                AndroidDeviceSelected = AndroidDevices.FirstOrDefault();
-            }
-            OnPropertyChanged(nameof(AndroidDeviceSelected));
+                AndroidDevices.Clear();
+                var devices = adbClient.GetDevices();
+                foreach (var device in devices)
+                {
+                    AndroidDevices.Add(new AudioDevice(device.Serial, $"{device.Name} {device.Model}"));
+                }
+                AndroidDeviceSelected = AndroidDevices.FirstOrDefault(m => m.ID == settings.AndroidId);
+                if (AndroidDeviceSelected == null)
+                {
+                    AndroidDeviceSelected = AndroidDevices.FirstOrDefault();
+                }
+                OnPropertyChanged(nameof(AndroidDeviceSelected));
+                AdbLoading = false;
+            });
         }
 
         static string FindAdbPath()
         {
-            string[] pathDirectories = Environment.GetEnvironmentVariable("PATH").Split(';');
-
+            List<string> pathDirectories = Environment.GetEnvironmentVariable("PATH").Split(';').ToList();
+            var mainModule = Process.GetCurrentProcess()?.MainModule;
+            if(mainModule != null)
+            {
+                pathDirectories.Add(Path.GetDirectoryName(mainModule.FileName));
+            }
             foreach (string directory in pathDirectories)
             {
                 string adbPath = Path.Combine(directory, "adb.exe");
-
                 if (File.Exists(adbPath))
                 {
                     return adbPath;

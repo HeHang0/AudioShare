@@ -43,7 +43,7 @@
                       SelectedValue="{Binding AudioDeviceSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                       DisplayMemberPath="Name" IsEnabled="{Binding UnConnected}"/>
                 <Button Height="30" Width="80" Content="{DynamicResource refresh}" IsEnabled="{Binding UnConnected}"
-                        Click="RefreshAndroidDevices" Margin="10 0 0 0" Style="{DynamicResource AccentButtonStyle}"/>
+                        Click="RefreshAudioDevices" Margin="10 0 0 0" Style="{DynamicResource AccentButtonStyle}"/>
             </StackPanel>
             <Label Content="{DynamicResource remoteAddressEditor}" Width="400" HorizontalContentAlignment="Left" Padding="0 5 0 5"
                     Visibility="{Binding IsIP, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
@@ -56,9 +56,14 @@
                         Visibility="{Binding IsUSB, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
                 <ComboBox Height="30" Width="310" ItemsSource="{Binding AndroidDevices}" VerticalContentAlignment="Center"
                       SelectedValue="{Binding AndroidDeviceSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                      DisplayMemberPath="Name" IsEnabled="{Binding UnConnected}"/>
-                <Button Height="30" Width="80" Content="{DynamicResource refresh}" IsEnabled="{Binding UnConnected}"
-                        Click="RefreshAndroidDevices" Margin="10 0 0 0" Style="{DynamicResource AccentButtonStyle}"/>
+                      DisplayMemberPath="Name" IsEnabled="{Binding IsAndroidDevicesEnabled}"/>
+                <Grid>
+                    <Button Height="30" Width="80" IsEnabled="{Binding UnConnected}" Content="{DynamicResource refresh}"
+                        Click="RefreshAndroidDevices" Margin="10 0 0 0" Style="{DynamicResource AccentButtonStyle}" />
+                    <ui:ProgressRing Visibility="{Binding AdbLoading, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"
+                                     HorizontalAlignment="Left" Padding="3" Margin="15 0 0 0"
+                                     IsActive="True" Width="10" Height="10" Foreground="White"/>
+                </Grid>
             </StackPanel>
             <StackPanel Orientation="Horizontal">
                 <Label Height="30" Content="{DynamicResource volume}" HorizontalContentAlignment="Left" VerticalContentAlignment="Center" />
@@ -67,13 +72,13 @@
                 <Slider Width="210" Maximum="100" IsEnabled="{Binding VolumeCustom}" Value="{Binding Volume}" />
                 <Label Content="{Binding Volume}" VerticalAlignment="Center" HorizontalContentAlignment="Right" Width="25" Margin="10 0 0 0"/>
             </StackPanel>
-            <Button Height="30" Width="400" Click="Run" Margin="0 10 0 0" Style="{DynamicResource AccentButtonStyle}"
-                     Visibility="{Binding UnConnected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
-                <StackPanel Orientation="Horizontal">
-                    <ui:ProgressRing Visibility="{Binding Loading, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}" IsActive="True" Width="10" Height="10" Foreground="White" Padding="3" Margin="0"/>
-                    <Label Foreground="White" Content="{DynamicResource connecte}"/>
-                </StackPanel>
-            </Button>
+            <Grid>
+                <Button Height="30" Width="400" Click="Run" Margin="0 10 0 0" Style="{DynamicResource AccentButtonStyle}"
+                        Visibility="{Binding UnConnected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"
+                        Content="{DynamicResource connecte}" />
+                <ui:ProgressRing Visibility="{Binding Loading, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"
+                                 IsActive="True" Width="10" Height="10" Foreground="White" Padding="3" Margin="0 10 50 0"/>
+            </Grid>
             <Button Height="30" Width="400" Click="Stop" Margin="0 10 0 0"
                     Content="{DynamicResource disconnecte}" Style="{DynamicResource AccentButtonStyle}"
                     Visibility="{Binding Connected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
