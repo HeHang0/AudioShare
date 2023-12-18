@@ -23,7 +23,6 @@ import java.net.Socket;
 public class TcpService extends Service {
     private static final String TAG = "AudioShareService";
     private static final String HEAD = "picapico-audio-share";
-    private static final int BUFFER_SIZE = 10240;
     private final IBinder binder = new TcpBinder();
     private MessageListener mListener;
     private LocalServerSocket localServerSocket = null;
@@ -69,7 +68,7 @@ public class TcpService extends Service {
         int bufferLength = HEAD.length();
         byte[] buffer = new byte[bufferLength];
         int offset = 0;
-        int bytesRead = 0;
+        int bytesRead;
         while (offset < bufferLength &&
                 (bytesRead = stream.read(buffer, offset, bufferLength - offset)) != -1){
             offset += bytesRead;
@@ -83,13 +82,24 @@ public class TcpService extends Service {
         return 0;
     }
 
+    private int readInt(InputStream stream) throws IOException {
+        byte[] buffer = new byte[4];
+        int offset = 0;
+        int bytesRead = 0;
+        while (offset < 4 &&
+                (bytesRead = stream.read(buffer, offset, 4 - offset)) != -1){
+            offset += bytesRead;
+        }
+        if(bytesRead < 0){
+            throw new IOException("read stream eol.");
+        }
+        return parseInt(buffer);
+    }
+
     private void processControlStream(byte command, InputStream stream) {
         if(command == 2){
             try {
-                DataInputStream inputStream = new DataInputStream(stream);
-                byte[] volumeBuffer = new byte[4];
-                inputStream.readFully(volumeBuffer, 0, 4);
-                int volume = readInt(volumeBuffer);
+                int volume = readInt(stream);
                 Log.i(TAG, "set music volume " + volume);
                 if(mAudioManager != null){
                     volume = maxAudioVolume * volume / 100;
@@ -104,26 +114,55 @@ public class TcpService extends Service {
         }
     }
 
+    private void processSocketClient(Closeable socket) throws IOException {
+        InputStream stream;
+        boolean isLocal = false;
+        if (socket instanceof LocalSocket){
+            stream = ((LocalSocket)socket).getInputStream();
+            isLocal = true;
+        }else if (socket instanceof Socket){
+            stream = ((Socket)socket).getInputStream();
+        }else {
+            return;
+        }
+        byte command = readHead(stream);
+        Log.i(TAG, "client connected: " + command);
+        if(command == 1 && !getPlaying()){
+            int sampleRate = readInt(stream);
+            int channel = AudioFormat.CHANNEL_OUT_STEREO;
+            int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
+            int bufferSizeInBytes = getMinBufferSize(sampleRate, channel, audioFormat);
+            if(isLocal){
+                ((LocalSocket)socket).setReceiveBufferSize(bufferSizeInBytes);
+            }else {
+                ((Socket)socket).setReceiveBufferSize(bufferSizeInBytes);
+            }
+            new Thread(() -> playAudio(
+                    sampleRate,
+                    channel,
+                    audioFormat,
+                    bufferSizeInBytes,
+                    socket,
+                    stream
+            )).start();
+        }else {
+            processControlStream(command, stream);
+            try {
+                Log.i(TAG, "client connection close");
+                socket.close();
+            } catch (IOException e) {
+                Log.e(TAG, "close client err: " + e);
+            }
+        }
+    }
+
     private void StartLocalServer(){
         Log.i(TAG, "prepare start server");
         try {
             localServerSocket = new LocalServerSocket(HEAD);
             while (true){
                 LocalSocket clientSocket = localServerSocket.accept();
-                InputStream stream = clientSocket.getInputStream();
-                byte command = readHead(stream);
-                Log.i(TAG, "client connected by local socket: " + command);
-                if(command == 1 && !getPlaying()){
-                    new Thread(() -> playAudio(clientSocket, stream)).start();
-                }else {
-                    processControlStream(command, stream);
-                    try {
-                        Log.i(TAG, "client connection close");
-                        clientSocket.close();
-                    } catch (IOException e) {
-                        Log.e(TAG, "close client socket err: " + e);
-                    }
-                }
+                processSocketClient(clientSocket);
             }
         } catch (IOException | RuntimeException e) {
             Log.e(TAG, e.toString());
@@ -154,20 +193,8 @@ public class TcpService extends Service {
             setListenPort(port);
             while (true){
                 Socket clientSocket = serverSocket.accept();
-                InputStream stream = clientSocket.getInputStream();
-                byte command = readHead(stream);
-                Log.i(TAG, "client connected by local socket: " + command);
-                if(command == 1 && !getPlaying()){
-                    new Thread(() -> playAudio(clientSocket, stream)).start();
-                }else {
-                    processControlStream(command, stream);
-                    try {
-                        Log.i(TAG, "client connection close");
-                        clientSocket.close();
-                    } catch (IOException e) {
-                        Log.e(TAG, "close client socket err: " + e);
-                    }
-                }
+                clientSocket.setTcpNoDelay(true);
+                processSocketClient(clientSocket);
             }
         } catch (IOException | RuntimeException e) {
             Log.e(TAG, "start tcp server error: " + e);
@@ -220,33 +247,37 @@ public class TcpService extends Service {
         maxAudioVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
     }
 
-    private void playAudio(Closeable closer, InputStream stream){
+    private int getMinBufferSize(int sampleRateInHz, int channelConfig, int audioFormat){
+        int size = 40960;
+        switch (sampleRateInHz){
+            case 192000: size = 30752; break;
+            case 176400: size = 28256; break;
+            case 96000: size = 15392; break;
+            case 48000: size = 7696; break;
+            case 44100: size = 7088; break;
+        }
+        return Math.min(AudioTrack.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat), size);
+    }
+
+    private void playAudio(int sampleRateInHz, int channelConfig, int audioFormat, int bufferSizeInBytes, Closeable closer, InputStream stream){
         if(getPlaying()) return;
         setPlaying(true);
         if(mListener != null){
             mListener.onMessage();
         }
-        DataInputStream inputStream = new DataInputStream(stream);
         AudioTrack audioTrack = null;
         try {
-            byte[] sampleRateBuffer = new byte[4];
-            inputStream.readFully(sampleRateBuffer, 0, 4);
-            int sampleRate = readInt(sampleRateBuffer);
-            int bufferSizeInBytes = AudioTrack.getMinBufferSize(
-                    sampleRate,
-                    AudioFormat.CHANNEL_OUT_STEREO,
-                    AudioFormat.ENCODING_PCM_16BIT);
             audioTrack = new AudioTrack(
                     AudioManager.STREAM_MUSIC,
-                    sampleRate,
-                    AudioFormat.CHANNEL_OUT_STEREO,
-                    AudioFormat.ENCODING_PCM_16BIT,
+                    sampleRateInHz,
+                    channelConfig,
+                    audioFormat,
                     bufferSizeInBytes, AudioTrack.MODE_STREAM);
-            audioTrack.play();
-            byte[] buffer = new byte[BUFFER_SIZE];
+            byte[] buffer = new byte[bufferSizeInBytes];
             int bytesRead;
             audioTrack.play();
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
+            Log.e(TAG, "play audio ready to read");
+            while ((bytesRead = stream.read(buffer)) != -1) {
                 if(bytesRead <= 0) continue;
                 audioTrack.write(buffer, 0, bytesRead);
                 audioTrack.flush();
@@ -283,7 +314,7 @@ public class TcpService extends Service {
         }
     }
 
-    private int readInt(byte[] buffer) {
+    private int parseInt(byte[] buffer) {
         return (buffer[0] & 0xFF) |
                 ((buffer[1] & 0xFF) << 8) |
                 ((buffer[2] & 0xFF) << 16) |

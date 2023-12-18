@@ -1,22 +1,21 @@
-﻿using NAudio.CoreAudioApi;
+﻿using Microsoft.Win32;
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using SharpAdbClient;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
-using System.Windows;
-using System.Threading;
-using Microsoft.Win32;
 using System.Text;
-using NotifyIcon = System.Windows.Forms.NotifyIcon;
-using DeviceState = NAudio.CoreAudioApi.DeviceState;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Collections.Generic;
-using System.IO.Packaging;
+using System.Windows;
+using DeviceState = NAudio.CoreAudioApi.DeviceState;
+using NotifyIcon = System.Windows.Forms.NotifyIcon;
 
 namespace AudioShare
 {
@@ -30,7 +29,7 @@ namespace AudioShare
         private readonly byte[] TCP_HEAD = Encoding.Default.GetBytes("picapico-audio-share");
         private NotifyIcon notifyIcon;
         private ResourceDictionary zhRD;
-        private ResourceDictionary enRD; 
+        private ResourceDictionary enRD;
         private ResourceDictionary currentRD;
         private readonly Settings settings = Settings.Read();
         enum Command
@@ -189,7 +188,7 @@ namespace AudioShare
                 settings.VolumeFollowSystem = value;
                 OnPropertyChanged(nameof(VolumeFollowSystem));
                 OnPropertyChanged(nameof(VolumeCustom));
-                if(value) SyncVolume();
+                if (value) SyncVolume();
             }
         }
 
@@ -261,7 +260,7 @@ namespace AudioShare
                     MMDeviceEnumerator enumerator = new MMDeviceEnumerator();
                     MMDeviceCollection devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
                     var instance = devices.FirstOrDefault(m => m.ID == audioDeviceSelected.ID);
-                    if(instance == null || instance?.ID != audioDeviceInstance?.ID)
+                    if (instance == null || instance?.ID != audioDeviceInstance?.ID)
                     {
                     }
                     audioDeviceInstance = instance;
@@ -283,7 +282,7 @@ namespace AudioShare
             }
             set
             {
-                if(androidDeviceSelected != value)
+                if (androidDeviceSelected != value)
                 {
                     androidDeviceSelected = value;
                     settings.AndroidId = androidDeviceSelected?.ID ?? string.Empty;
@@ -346,8 +345,8 @@ namespace AudioShare
         public bool UnConnected => !Connected;
         #endregion
 
-        private WasapiLoopbackCapture waveIn;
-        private TcpClient tcpClient;
+        private WasapiLoopbackCapture waveIn = null;
+        private TcpClient tcpClient = null;
 
         private async Task ConnectTCP()
         {
@@ -355,26 +354,25 @@ namespace AudioShare
             try
             {
                 StopTCP();
+                tcpClient = new TcpClient();
                 if (IsUSB)
                 {
                     var receiver = new ConsoleOutputReceiver();
                     await adbClient.ExecuteRemoteCommandAsync("am start -W -n com.picapico.audioshare/.MainActivity", androidDeviceInstance, receiver, CancellationToken.None);
                     adbClient.CreateForward(androidDeviceInstance, "tcp:" + HTTP_PORT, "localabstract:picapico-audio-share", true);
-                    tcpClient = new TcpClient();
                     await tcpClient.ConnectAsync("127.0.0.1", HTTP_PORT);
                 }
                 else
                 {
                     var addressArr = IPAddress.Split(':');
                     string ip = addressArr.FirstOrDefault()?.Trim() ?? string.Empty;
-                    if(!int.TryParse(addressArr.LastOrDefault()?.Trim() ?? string.Empty, out int port))
+                    if (!int.TryParse(addressArr.LastOrDefault()?.Trim() ?? string.Empty, out int port))
                     {
                         port = 80;
                     }
-                    tcpClient = new TcpClient();
                     await tcpClient.ConnectAsync(ip, port);
                 }
-                if(tcpClient.Connected)
+                if (tcpClient.Connected)
                 {
                     WriteTcp(TCP_HEAD);
                     WriteTcp(new byte[] { (byte)Command.AudioData });
@@ -386,8 +384,7 @@ namespace AudioShare
             }
             catch (Exception)
             {
-                StopCapture();
-                StopTCP();
+                Stop();
             }
             Loading = false;
         }
@@ -399,18 +396,26 @@ namespace AudioShare
             waveIn.WaveFormat = new WaveFormat(settings.SampleRate, 16, 2);
             waveIn.DataAvailable += SendAudioData;
             waveIn.StartRecording();
-            SetRemoteVolume();
             Dispatcher.Invoke(() =>
             {
                 Connected = true;
             });
+            SetRemoteVolume();
         }
 
         private void SendAudioData(object sender, WaveInEventArgs e)
         {
             if (e.BytesRecorded > 0)
             {
-                WriteTcp(e.Buffer, e.BytesRecorded);
+                var data = new byte[e.BytesRecorded];
+                Array.Copy(e.Buffer, data, e.BytesRecorded);
+                Dispatcher.InvokeAsync(() =>
+                {
+                    if (!WriteTcp(e.Buffer, e.BytesRecorded))
+                    {
+                        Stop();
+                    }
+                });
             }
         }
 
@@ -495,18 +500,22 @@ namespace AudioShare
             }
         }
 
-        private void WriteTcp(byte[] buffer, int length=0)
+        private bool WriteTcp(byte[] buffer, int length = 0)
         {
             if (length == 0) length = buffer.Length;
             try
             {
-                tcpClient?.GetStream().Write(buffer, 0, length);
+                if (tcpClient != null)
+                {
+                    tcpClient.GetStream().Write(buffer, 0, length);
+                    tcpClient.GetStream().Flush();
+                    return true;
+                }
             }
             catch (Exception)
             {
-                StopCapture();
-                StopTCP();
             }
+            return false;
         }
 
         private async void Run(object sender, RoutedEventArgs e)
@@ -520,14 +529,19 @@ namespace AudioShare
 
         private void Stop(object sender, RoutedEventArgs e)
         {
+            Stop();
+        }
+
+        private void Stop()
+        {
             StopCapture();
             StopTCP();
+            Connected = false;
         }
 
         private void Exit(object sender, RoutedEventArgs e)
         {
-            StopCapture();
-            StopTCP();
+            Stop();
             Application.Current.Shutdown();
         }
 
@@ -563,7 +577,7 @@ namespace AudioShare
         {
             await RefreshAndroidDevices();
         }
-        AdbClient adbClient = new AdbClient();
+        readonly AdbClient adbClient = new AdbClient();
         private async Task RefreshAndroidDevices()
         {
             if (AdbLoading) return;
@@ -630,7 +644,7 @@ namespace AudioShare
         {
             List<string> pathDirectories = Environment.GetEnvironmentVariable("PATH").Split(';').ToList();
             var mainModule = Process.GetCurrentProcess()?.MainModule;
-            if(mainModule != null)
+            if (mainModule != null)
             {
                 pathDirectories.Add(Path.GetDirectoryName(mainModule.FileName));
             }
@@ -646,51 +660,37 @@ namespace AudioShare
             return null;
         }
 
-        private bool captureStoping = false;
         private void StopCapture()
         {
-            if (captureStoping) return;
-            captureStoping = true;
-            try
-            {
-                if(waveIn != null)
-                {
-                    waveIn.DataAvailable -= SendAudioData;
-                    waveIn.StopRecording();
-                    waveIn.Dispose();
-                }
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine("Stop Recording Error: " + ex.Message);
-            }
             Dispatcher.Invoke(() =>
             {
-                Connected = false;
+                try
+                {
+                    if (waveIn != null)
+                    {
+                        waveIn.Dispose();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine("Stop Recording Error: " + ex.Message);
+                }
+                waveIn = null;
             });
-            waveIn = null;
-            captureStoping = false;
         }
 
-        private bool tcpStoping = false;
         private void StopTCP()
         {
-            if (tcpStoping) return;
-            tcpStoping = true;
             try
             {
                 tcpClient?.Close();
                 tcpClient?.Dispose();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Trace.WriteLine("Stop Tcp Error: " + ex.Message);
             }
             tcpClient = null;
-            tcpStoping = false;
-            Dispatcher.Invoke(() =>
-            {
-                Connected = false;
-            });
         }
 
         private void OnPropertyChanged(string propertyName)

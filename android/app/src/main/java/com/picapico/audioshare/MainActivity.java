@@ -9,6 +9,8 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
@@ -133,34 +135,31 @@ public class MainActivity extends AppCompatActivity {
         return nightModeFlags == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    public static String getIpAddress(Context context){
+    private Boolean isNetworkAvailable(NetworkInfo info) {
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Network nw = connectivityManager.getActiveNetwork();
+            if (nw == null) return false;
+            NetworkCapabilities actNw = connectivityManager.getNetworkCapabilities(nw);
+            return actNw != null && (actNw.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                            actNw.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                            actNw.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
+                            actNw.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH));
+        } else {
+            return info != null && info.isConnected();
+        }
+    }
+
+    public String getIpAddress(Context context){
         NetworkInfo info = ((ConnectivityManager) context
                 .getSystemService(Context.CONNECTIVITY_SERVICE)).getActiveNetworkInfo();
-        if (info != null && info.isConnected()) {
-            // 3/4g网络
-            if (info.getType() == ConnectivityManager.TYPE_MOBILE) {
-                try {
-                    for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements(); ) {
-                        NetworkInterface networkInterface = en.nextElement();
-                        for (Enumeration<InetAddress> enumIpAddress = networkInterface.getInetAddresses(); enumIpAddress.hasMoreElements(); ) {
-                            InetAddress inetAddress = enumIpAddress.nextElement();
-                            if (!inetAddress.isLoopbackAddress() && inetAddress instanceof Inet4Address) {
-                                return inetAddress.getHostAddress();
-                            }
-                        }
-                    }
-                } catch (SocketException e) {
-                    e.printStackTrace();
-                }
-
+        if (info != null && isNetworkAvailable(info)) {
+            if (info.getType() == ConnectivityManager.TYPE_ETHERNET){
+                return getLocalIp();
             } else if (info.getType() == ConnectivityManager.TYPE_WIFI) {
-                //  wifi网络
                 WifiManager wifiManager = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
                 WifiInfo wifiInfo = wifiManager.getConnectionInfo();
                 return intIP2StringIP(wifiInfo.getIpAddress());
-            }  else if (info.getType() == ConnectivityManager.TYPE_ETHERNET){
-                // 有限网络
-                return getLocalIp();
             }
         }
         return "";
@@ -179,10 +178,10 @@ public class MainActivity extends AppCompatActivity {
         try {
             for (Enumeration<NetworkInterface> en = NetworkInterface
                     .getNetworkInterfaces(); en.hasMoreElements(); ) {
-                NetworkInterface intf = en.nextElement();
-                for (Enumeration<InetAddress> enumIpAddr = intf
-                        .getInetAddresses(); enumIpAddr.hasMoreElements(); ) {
-                    InetAddress inetAddress = enumIpAddr.nextElement();
+                NetworkInterface networkInterface = en.nextElement();
+                for (Enumeration<InetAddress> enumIpAddress = networkInterface
+                        .getInetAddresses(); enumIpAddress.hasMoreElements(); ) {
+                    InetAddress inetAddress = enumIpAddress.nextElement();
                     if (!inetAddress.isLoopbackAddress()
                             && inetAddress instanceof Inet4Address) {
                         return inetAddress.getHostAddress();
