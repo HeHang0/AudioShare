@@ -9,9 +9,6 @@
         ui:WindowHelper.UseModernWindowStyle="True"
         ui:TitleBar.IsIconVisible="True"
         Title="{DynamicResource title}" Height="360" Width="500" ResizeMode="NoResize">
-    <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BooleanToVisibility"/>
-    </Window.Resources>
     <Grid>
         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
             <Grid>
@@ -21,18 +18,17 @@
                     <ui:ToggleSwitch IsOn="{Binding IsUSB}" Width="40" IsEnabled="{Binding UnConnected}"/>
                     <Label Content="USB" Margin="5 0 10 0" HorizontalAlignment="Left" VerticalAlignment="Center"/>
                     <ComboBox Height="23" Width="90" Margin="27 0 0 0" ItemsSource="{Binding SampleRates}" IsEnabled="{Binding UnConnected}"
-                              VerticalAlignment="Center" VerticalContentAlignment="Center" Padding="8 0 0 0"
+                              VerticalAlignment="Center" VerticalContentAlignment="Center" Padding="10 0 0 0"
                       SelectedValue="{Binding SampleRateSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                 </StackPanel>
-
                 <StackPanel  Orientation="Horizontal" HorizontalAlignment="Right"
-                             Visibility="{Binding UnConnected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
+                     Visibility="{Binding UnConnected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
                     <Border Width="10" Height="10" Margin="0 0 5 0" Background="Red" CornerRadius="50"/>
                     <Label Content="{DynamicResource unconnected}" Padding="0 5 0 5" VerticalContentAlignment="Center"/>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
-                            Visibility="{Binding Connected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
+                    Visibility="{Binding Connected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
                     <Border Width="10" Height="10" Margin="0 0 5 0" Background="Green" CornerRadius="50"/>
                     <Label Content="{DynamicResource connected}" Padding="0 5 0 5" VerticalContentAlignment="Center"/>
                 </StackPanel>

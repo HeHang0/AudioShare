@@ -14,4 +14,7 @@
     <s:String x:Key="remoteAddressEditor">Please input remote address: </s:String>
     <s:String x:Key="volume">Volume: </s:String>
     <s:String x:Key="followSystem">Follow system</s:String>
+    <s:String x:Key="apkExistsTips">download apk to the current directory</s:String>
+    <s:String x:Key="apkMisMatch">App not installed or version mismatch, please manually install</s:String>
+    <s:String x:Key="or">or</s:String>
 </ResourceDictionary>

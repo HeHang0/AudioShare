@@ -5,6 +5,8 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.media.AudioManager;
@@ -67,6 +69,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         setStatusBarTransparent();
+        setVersionName();
         ipAddress = findViewById(R.id.ipAddress);
         connectedLayout = findViewById(R.id.connected);
         unConnectedLayout = findViewById(R.id.unconnected);
@@ -82,6 +85,18 @@ public class MainActivity extends AppCompatActivity {
         if (isBound) {
             unbindService(connection);
             isBound = false;
+        }
+    }
+
+    private void setVersionName(){
+        PackageManager packageManager = getPackageManager();
+        String packageName = getPackageName();
+        try {
+            PackageInfo packageInfo = packageManager.getPackageInfo(packageName, 0);
+            TextView versionName = findViewById(R.id.versionName);
+            versionName.setText(packageInfo.versionName);
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.e(TAG, "set version error: " + e);
         }
     }
 
@@ -122,10 +137,12 @@ public class MainActivity extends AppCompatActivity {
         View decor = this.getWindow().getDecorView();
         if (!dark) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+                decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                        View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
             }
         } else {
-            decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+            decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         }
     }
 
@@ -136,7 +153,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Boolean isNetworkAvailable(NetworkInfo info) {
-        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        ConnectivityManager connectivityManager =
+                (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Network nw = connectivityManager.getActiveNetwork();
             if (nw == null) return false;
@@ -157,7 +175,8 @@ public class MainActivity extends AppCompatActivity {
             if (info.getType() == ConnectivityManager.TYPE_ETHERNET){
                 return getLocalIp();
             } else if (info.getType() == ConnectivityManager.TYPE_WIFI) {
-                WifiManager wifiManager = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                WifiManager wifiManager = (WifiManager) context.getApplicationContext()
+                        .getSystemService(Context.WIFI_SERVICE);
                 WifiInfo wifiInfo = wifiManager.getConnectionInfo();
                 return intIP2StringIP(wifiInfo.getIpAddress());
             }

@@ -2,12 +2,14 @@
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using SharpAdbClient;
+using SharpAdbClient.DeviceCommands;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Pipes;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
@@ -32,6 +34,7 @@ namespace AudioShare
         private ResourceDictionary enRD;
         private ResourceDictionary currentRD;
         private readonly Settings settings = Settings.Read();
+        private string versionName = string.Empty;
         enum Command
         {
             None = 0,
@@ -39,14 +42,43 @@ namespace AudioShare
             Volume = 2,
             SampleRate = 3
         }
+
         public MainWindow()
         {
             InitializeComponent();
             InitLanguage();
+            InitVersion();
             DataContext = this;
             Loaded += MainWindow_Loaded;
             Closing += MainWindow_Closing;
             InitNotify();
+            InitNamedPipeServerStream();
+        }
+
+        private async void InitNamedPipeServerStream()
+        {
+            NamedPipeServerStream serverStream = new NamedPipeServerStream("_AUDIO_SHARE_PIPE", PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+            try
+            {
+                await serverStream.WaitForConnectionAsync();
+                Dispatcher.Invoke(() =>
+                {
+                    ShowWindow();
+                });
+                serverStream.Close();
+            }
+            catch (Exception ex)
+            {
+            }
+            InitNamedPipeServerStream();
+        }
+
+        private void InitVersion()
+        {
+            var version = Application.ResourceAssembly.GetName()?.Version;
+            if (version == null) return;
+            versionName = $"{version.Major}.{version.Minor}.{version.Build}";
+            Title += $" {versionName}";
         }
 
         private void InitLanguage()
@@ -119,6 +151,11 @@ namespace AudioShare
 
         private void OnNotifyIconClick(object sender, EventArgs e)
         {
+            ShowWindow();
+        }
+
+        private void ShowWindow()
+        {
             Show();
             WindowState = WindowState.Normal;
             Activate();
@@ -145,12 +182,11 @@ namespace AudioShare
             }
             else
             {
-                OnNotifyIconClick(null, null);
+                ShowWindow();
             }
         }
 
         #region Model
-
         public bool IsUSB
         {
             get
@@ -235,11 +271,11 @@ namespace AudioShare
             }
         }
 
-        public ObservableCollection<AudioDevice> AudioDevices { get; } = new ObservableCollection<AudioDevice>();
+        public ObservableCollection<NamePair> AudioDevices { get; } = new ObservableCollection<NamePair>();
 
         private MMDevice audioDeviceInstance = null;
-        private AudioDevice audioDeviceSelected;
-        public AudioDevice AudioDeviceSelected
+        private NamePair audioDeviceSelected;
+        public NamePair AudioDeviceSelected
         {
             get
             {
@@ -270,11 +306,11 @@ namespace AudioShare
             }
         }
 
-        public ObservableCollection<AudioDevice> AndroidDevices { get; } = new ObservableCollection<AudioDevice>();
+        public ObservableCollection<NamePair> AndroidDevices { get; } = new ObservableCollection<NamePair>();
 
         private DeviceData androidDeviceInstance = null;
-        private AudioDevice androidDeviceSelected;
-        public AudioDevice AndroidDeviceSelected
+        private NamePair androidDeviceSelected;
+        public NamePair AndroidDeviceSelected
         {
             get
             {
@@ -355,10 +391,13 @@ namespace AudioShare
             {
                 StopTCP();
                 tcpClient = new TcpClient();
+                tcpClient.NoDelay = true;
                 if (IsUSB)
                 {
-                    var receiver = new ConsoleOutputReceiver();
-                    await adbClient.ExecuteRemoteCommandAsync("am start -W -n com.picapico.audioshare/.MainActivity", androidDeviceInstance, receiver, CancellationToken.None);
+                    if(!await EnsureDevice(androidDeviceInstance))
+                    {
+                        throw new Exception("device not ready");
+                    }
                     adbClient.CreateForward(androidDeviceInstance, "tcp:" + HTTP_PORT, "localabstract:picapico-audio-share", true);
                     await tcpClient.ConnectAsync("127.0.0.1", HTTP_PORT);
                 }
@@ -366,9 +405,14 @@ namespace AudioShare
                 {
                     var addressArr = IPAddress.Split(':');
                     string ip = addressArr.FirstOrDefault()?.Trim() ?? string.Empty;
-                    if (!int.TryParse(addressArr.LastOrDefault()?.Trim() ?? string.Empty, out int port))
+                    if (addressArr.Length < 2 ||
+                        !int.TryParse(addressArr.LastOrDefault()?.Trim() ?? string.Empty, out int port))
                     {
                         port = 80;
+                    }
+                    if(!await EnsureDevice(ip, port))
+                    {
+                        throw new Exception("device not ready");
                     }
                     await tcpClient.ConnectAsync(ip, port);
                 }
@@ -378,15 +422,109 @@ namespace AudioShare
                     WriteTcp(new byte[] { (byte)Command.AudioData });
                     var sampleRateBytes = BitConverter.GetBytes(settings.SampleRate);
                     WriteTcp(sampleRateBytes);
+                    var channelBytes = BitConverter.GetBytes(12);
+                    WriteTcp(channelBytes);
+                    tcpClient.GetStream().Read(new byte[1], 0, 1);
                     StartCapture();
                 }
                 settings.Save();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Trace.WriteLine("connect tcp error: " + ex);
                 Stop();
             }
             Loading = false;
+        }
+
+        private async Task<bool> PortIsOpen(string host, int port)
+        {
+            try
+            {
+                using (TcpClient tcpClient = new TcpClient())
+                {
+                    tcpClient.ReceiveTimeout = 1000;
+                    await tcpClient.ConnectAsync(host, port);
+                    return true;
+                }
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private async Task<bool> EnsureDevice(string host, int port)
+        {
+            bool result = await PortIsOpen(host, port);
+            DeviceData device;
+            bool needDisconnect = false;
+            try
+            {
+                device = adbClient.GetDevices().FirstOrDefault(m => m.Serial?.StartsWith(host) ?? false);
+                needDisconnect = device == null;
+                if (device == null)
+                {
+                    if (!await PortIsOpen(host, 5555)) return result;
+                    await RunCommandAsync(FindAdbPath(), $"connect {host}:5555");
+                    device = adbClient.GetDevices().FirstOrDefault(m => m.Serial?.StartsWith(host) ?? false);
+                }
+                if (device == null) return result;
+                result = await EnsureDevice(device);
+            }
+            catch (Exception)
+            {
+                return result;
+            }
+            if(needDisconnect) await RunCommandAsync(FindAdbPath(), $"disconnect {host}:5555");
+            return result;
+        }
+
+        private async Task<bool> EnsureDevice(DeviceData device)
+        {
+            if (device == null) return false;
+
+            if (string.IsNullOrEmpty(device.Serial)) return false;
+
+            string result = await ExecuteRemoteCommandAsync("dumpsys package com.picapico.audioshare|grep versionName", androidDeviceInstance);
+            if (result.Contains(versionName))
+            {
+                await ExecuteRemoteCommandAsync("am start -W -n com.picapico.audioshare/.MainActivity", androidDeviceInstance);
+                return true;
+            }
+            string appPath = Process.GetCurrentProcess()?.MainModule.FileName ?? string.Empty;
+            if (string.IsNullOrEmpty(appPath)) return false;
+            string apkPath = Path.Combine(Path.GetDirectoryName(appPath), Path.GetFileNameWithoutExtension(appPath)+".apk");
+            if(!File.Exists(apkPath))
+            {
+                WindowState = WindowState.Normal;
+                MessageBox.Show(this, $"{currentRD["apkMisMatch"]}{currentRD["or"]}{currentRD["apkExistsTips"]}", Title);
+                return false;
+            }
+
+            await ExecuteRemoteCommandAsync("rm -f /data/local/tmp/audioshare.apk", androidDeviceInstance);
+            await RunCommandAsync(FindAdbPath(), $"-s {device.Serial} push \"{apkPath}\" /data/local/tmp/audioshare.apk");
+            string shellPath = Path.Combine(Path.GetTempPath(), "audioshareinstall.sh");
+            File.WriteAllText(shellPath, "pm install -r /data/local/tmp/audioshare.apk && rm -f /data/local/tmp/audioshareinstall.sh");
+            await RunCommandAsync(FindAdbPath(), $"-s {device.Serial} push \"{shellPath}\" /data/local/tmp/audioshareinstall.sh");
+            await ExecuteRemoteCommandAsync("chmod 777 /data/local/tmp/audioshareinstall.sh && /data/local/tmp/audioshareinstall.sh", androidDeviceInstance);
+
+            result = await ExecuteRemoteCommandAsync("dumpsys package com.picapico.audioshare|grep versionName", androidDeviceInstance);
+            if (result.Contains(versionName))
+            {
+                await ExecuteRemoteCommandAsync("am start -W -n com.picapico.audioshare/.MainActivity", androidDeviceInstance);
+                return true;
+            }
+            WindowState = WindowState.Normal;
+            MessageBox.Show(this, currentRD["apkMisMatch"].ToString(), Title);
+            return false;
+        }
+
+        private async Task<string> ExecuteRemoteCommandAsync(string command, DeviceData device)
+        {
+            var receiver = new ConsoleOutputReceiver();
+            await adbClient.ExecuteRemoteCommandAsync(command, device, receiver, CancellationToken.None);
+            return receiver.ToString() ?? string.Empty;
         }
 
         private void StartCapture()
@@ -407,15 +545,28 @@ namespace AudioShare
         {
             if (e.BytesRecorded > 0)
             {
-                var data = new byte[e.BytesRecorded];
-                Array.Copy(e.Buffer, data, e.BytesRecorded);
-                Dispatcher.InvokeAsync(() =>
+                /* Support Mono
+                byte[] buffer = e.Buffer;
+                int bufferLen = e.BytesRecorded;
+                if (Channel != AudioChannel.Stereo)
                 {
-                    if (!WriteTcp(e.Buffer, e.BytesRecorded))
+                    buffer = new byte[bufferLen /= 2];
+                    for (int i = Channel == AudioChannel.Left ? 0 : 2, j = 0;
+                        j < buffer.Length;
+                        i += 4, j += 2)
+                    {
+                        buffer[j] = e.Buffer[i];
+                        buffer[j + 1] = e.Buffer[i + 1];
+                    }
+                }
+                */
+                if (!WriteTcp(e.Buffer, e.BytesRecorded))
+                {
+                    Dispatcher.InvokeAsync(() =>
                     {
                         Stop();
-                    }
-                });
+                    });
+                }
             }
         }
 
@@ -463,6 +614,7 @@ namespace AudioShare
         {
             if (UnConnected) return;
             TcpClient client = new TcpClient();
+            client.ReceiveTimeout = 1000;
             try
             {
                 if (IsUSB)
@@ -473,7 +625,7 @@ namespace AudioShare
                 {
                     var addressArr = IPAddress.Split(':');
                     string ip = addressArr.FirstOrDefault()?.Trim() ?? string.Empty;
-                    if (!int.TryParse(addressArr.LastOrDefault()?.Trim() ?? string.Empty, out int port))
+                    if (addressArr.Length < 2 || !int.TryParse(addressArr.LastOrDefault()?.Trim() ?? string.Empty, out int port))
                     {
                         port = 80;
                     }
@@ -512,7 +664,7 @@ namespace AudioShare
                     return true;
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
             }
             return false;
@@ -537,6 +689,7 @@ namespace AudioShare
             StopCapture();
             StopTCP();
             Connected = false;
+            ShowWindow();
         }
 
         private void Exit(object sender, RoutedEventArgs e)
@@ -562,7 +715,7 @@ namespace AudioShare
             AudioDevices.Clear();
             foreach (MMDevice device in devices)
             {
-                AudioDevices.Add(new AudioDevice(device.ID, device.FriendlyName));
+                AudioDevices.Add(new NamePair(device.ID, device.FriendlyName));
             }
             AudioDeviceSelected = AudioDevices.FirstOrDefault(m => m.ID == selectedId);
             if (AudioDeviceSelected == null)
@@ -587,31 +740,9 @@ namespace AudioShare
                 return;
             }
 
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = adbPath,
-                Arguments = "devices",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            };
             AdbLoading = true;
-            Process process = new Process
-            {
-                StartInfo = startInfo,
-                EnableRaisingEvents = true
-            };
-            var completionSource = new TaskCompletionSource<int>();
-            process.Exited += (sender, args) =>
-            {
-                completionSource.SetResult(process.ExitCode);
-                process.Dispose();
-            };
-            if (process.Start())
-            {
-                await completionSource.Task;
-            }
-
+            await RunCommandAsync(adbPath, "start-server");
+            await RunCommandAsync(adbPath, "devices");
             AdbServer server = new AdbServer();
             var result = server.StartServer(adbPath, restartServerIfNewer: false);
             if (result == StartServerResult.RestartedOutdatedDaemon)
@@ -628,7 +759,7 @@ namespace AudioShare
                 var devices = adbClient.GetDevices();
                 foreach (var device in devices)
                 {
-                    AndroidDevices.Add(new AudioDevice(device.Serial, $"{device.Name} {device.Model}"));
+                    AndroidDevices.Add(new NamePair(device.Serial, $"{device.Name} {device.Model}"));
                 }
                 AndroidDeviceSelected = AndroidDevices.FirstOrDefault(m => m.ID == settings.AndroidId);
                 if (AndroidDeviceSelected == null)
@@ -638,6 +769,34 @@ namespace AudioShare
                 OnPropertyChanged(nameof(AndroidDeviceSelected));
                 AdbLoading = false;
             });
+        }
+
+        static async Task<int> RunCommandAsync(string fileName, string arguments)
+        {
+            var processInfo = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+            };
+            Process process = new Process
+            {
+                StartInfo = processInfo,
+                EnableRaisingEvents = true
+            };
+            var completionSource = new TaskCompletionSource<int>();
+            process.Exited += (sender, args) =>
+            {
+                completionSource.SetResult(process.ExitCode);
+                process.Dispose();
+            };
+            if (process.Start())
+            {
+                return await completionSource.Task;
+            }
+            return 0;
         }
 
         static string FindAdbPath()

@@ -14,4 +14,7 @@
     <s:String x:Key="remoteAddressEditor">请选择远程地址：</s:String>
     <s:String x:Key="volume">音量：</s:String>
     <s:String x:Key="followSystem">跟随系统</s:String>
+    <s:String x:Key="apkExistsTips">下载apk至当前目录</s:String>
+    <s:String x:Key="apkMisMatch">app未安装或版本不匹配，请手动安装</s:String>
+    <s:String x:Key="or">或</s:String>
 </ResourceDictionary>

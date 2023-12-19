@@ -14,9 +14,9 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 
 import java.io.Closeable;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 
@@ -129,13 +129,16 @@ public class TcpService extends Service {
         Log.i(TAG, "client connected: " + command);
         if(command == 1 && !getPlaying()){
             int sampleRate = readInt(stream);
-            int channel = AudioFormat.CHANNEL_OUT_STEREO;
+            int channel = readInt(stream);
             int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
             int bufferSizeInBytes = getMinBufferSize(sampleRate, channel, audioFormat);
+            OutputStream outputStream;
             if(isLocal){
                 ((LocalSocket)socket).setReceiveBufferSize(bufferSizeInBytes);
+                outputStream = ((LocalSocket)socket).getOutputStream();
             }else {
                 ((Socket)socket).setReceiveBufferSize(bufferSizeInBytes);
+                outputStream = ((Socket)socket).getOutputStream();
             }
             new Thread(() -> playAudio(
                     sampleRate,
@@ -143,7 +146,8 @@ public class TcpService extends Service {
                     audioFormat,
                     bufferSizeInBytes,
                     socket,
-                    stream
+                    stream,
+                    outputStream
             )).start();
         }else {
             processControlStream(command, stream);
@@ -259,7 +263,7 @@ public class TcpService extends Service {
         return Math.min(AudioTrack.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat), size);
     }
 
-    private void playAudio(int sampleRateInHz, int channelConfig, int audioFormat, int bufferSizeInBytes, Closeable closer, InputStream stream){
+    private void playAudio(int sampleRateInHz, int channelConfig, int audioFormat, int bufferSizeInBytes, Closeable closer, InputStream stream, OutputStream outputStream){
         if(getPlaying()) return;
         setPlaying(true);
         if(mListener != null){
@@ -276,7 +280,9 @@ public class TcpService extends Service {
             byte[] buffer = new byte[bufferSizeInBytes];
             int bytesRead;
             audioTrack.play();
-            Log.e(TAG, "play audio ready to read");
+            Log.i(TAG, "play audio ready to read");
+            outputStream.write(new byte[1]);
+            outputStream.flush();
             while ((bytesRead = stream.read(buffer)) != -1) {
                 if(bytesRead <= 0) continue;
                 audioTrack.write(buffer, 0, bytesRead);
@@ -291,6 +297,11 @@ public class TcpService extends Service {
                 stream.close();
             } catch (Exception e) {
                 Log.e(TAG, "stop stream error: " + e);
+            }
+            try {
+                outputStream.close();
+            } catch (Exception e) {
+                Log.e(TAG, "stop output stream error: " + e);
             }
             try {
                 closer.close();
