@@ -1,0 +1,130 @@
+package com.picapico.audioshare;
+
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkInfo;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
+import android.os.Build;
+import android.util.Log;
+
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.ServerSocket;
+import java.net.SocketException;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
+
+public class NetworkUtils {
+    private static final String TAG = "AudioShareNetworkUtils";
+    public static final String BROADCAST_ADDRESS = "255.255.255.255";
+    public static boolean checkPortBusy(int port){
+        try {
+            new ServerSocket(port).close();
+            return true;
+        } catch (Exception ignore) {
+            return false;
+        }
+    }
+
+    public static int getFreePort(){
+        int port = 8088;
+        for (; port < 65535; port++) {
+            if(checkPortBusy(port)){
+                break;
+            }
+        }
+        return port;
+    }
+
+    public static String getIpAddress(Context context){
+        NetworkInfo info = ((ConnectivityManager) context
+                .getSystemService(Context.CONNECTIVITY_SERVICE)).getActiveNetworkInfo();
+        if (info != null && isNetworkAvailable(context, info)) {
+            if (info.getType() == ConnectivityManager.TYPE_ETHERNET){
+                return getLocalIp();
+            } else if (info.getType() == ConnectivityManager.TYPE_WIFI) {
+                WifiManager wifiManager = (WifiManager) context.getApplicationContext()
+                        .getSystemService(Context.WIFI_SERVICE);
+                WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+                return intIP2StringIP(wifiInfo.getIpAddress());
+            }
+        }
+        return "";
+    }
+
+    private static Boolean isNetworkAvailable(Context context, NetworkInfo info) {
+        ConnectivityManager connectivityManager =
+                (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Network nw = connectivityManager.getActiveNetwork();
+            if (nw == null) return false;
+            NetworkCapabilities actNw = connectivityManager.getNetworkCapabilities(nw);
+            return actNw != null && (actNw.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                    actNw.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                    actNw.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
+                    actNw.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH));
+        } else {
+            return info != null && info.isConnected();
+        }
+    }
+
+    private static String intIP2StringIP(int ip) {
+        return (ip & 0xFF) + "." +
+                ((ip >> 8) & 0xFF) + "." +
+                ((ip >> 16) & 0xFF) + "." +
+                (ip >> 24 & 0xFF);
+    }
+
+
+    // 获取有限网IP
+    public static String getLocalIp() {
+        try {
+            for (Enumeration<NetworkInterface> en = NetworkInterface
+                    .getNetworkInterfaces(); en.hasMoreElements(); ) {
+                NetworkInterface networkInterface = en.nextElement();
+                for (Enumeration<InetAddress> enumIpAddress = networkInterface
+                        .getInetAddresses(); enumIpAddress.hasMoreElements(); ) {
+                    InetAddress inetAddress = enumIpAddress.nextElement();
+                    if (!inetAddress.isLoopbackAddress()
+                            && inetAddress instanceof Inet4Address) {
+                        return inetAddress.getHostAddress();
+                    }
+                }
+            }
+        } catch (SocketException ex) {
+            Log.e(TAG, "get local ip error: " + ex);
+        }
+        return "0.0.0.0";
+    }
+
+    public static List<InetAddress> getAllInetAddress(){
+        List<InetAddress> localAddresses = new ArrayList<>();
+        Enumeration<NetworkInterface> interfaces;
+        try {
+            interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                try {
+                    NetworkInterface networkInterface = interfaces.nextElement();
+                    Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
+                    boolean isLoopback = networkInterface.isLoopback();
+                    boolean isUp = networkInterface.isUp();
+                    byte[] hardwareAddress = networkInterface.getHardwareAddress();
+                    if(isLoopback || !isUp || hardwareAddress == null) continue;
+                    while (addresses.hasMoreElements()) {
+                        localAddresses.add(addresses.nextElement());
+                    }
+                } catch (SocketException e) {
+                    Log.e(TAG, "get all inet address error: " + e);
+                }
+            }
+        } catch (SocketException e) {
+            Log.e(TAG, "get all inet address error: " + e);
+        }
+        return localAddresses;
+    }
+}

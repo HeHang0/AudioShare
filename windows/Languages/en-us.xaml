@@ -10,11 +10,13 @@
     <s:String x:Key="unconnected">Not Connected</s:String>
     <s:String x:Key="audioDeviceSelection">Please select an audio device: </s:String>
     <s:String x:Key="refresh">Refresh</s:String>
-    <s:String x:Key="androidDeviceSelection">Please select an android device: </s:String>
-    <s:String x:Key="remoteAddressEditor">Please input remote address: </s:String>
+    <s:String x:Key="audioPlaybackDevice">Audio playback device: </s:String>
     <s:String x:Key="volume">Volume: </s:String>
     <s:String x:Key="followSystem">Follow system</s:String>
     <s:String x:Key="apkExistsTips">download apk to the current directory</s:String>
     <s:String x:Key="apkMisMatch">App not installed or version mismatch, please manually install</s:String>
+    <s:String x:Key="adbMisMatch">ADB does not exist, please download to the current directory</s:String>
     <s:String x:Key="or">or</s:String>
+    <s:String x:Key="remove">Remove</s:String>
+    <s:String x:Key="add">add</s:String>
 </ResourceDictionary>

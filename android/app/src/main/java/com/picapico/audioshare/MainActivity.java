@@ -114,7 +114,7 @@ public class MainActivity extends AppCompatActivity {
         if(tcpService == null) return;
         runOnUiThread(() -> {
             int port = tcpService.getListenPort();
-            String ip = getIpAddress(this);
+            String ip = NetworkUtils.getIpAddress(this);
             ipAddress.setText(ip + ":" + port);
         });
     }
@@ -150,66 +150,5 @@ public class MainActivity extends AppCompatActivity {
         int nightModeFlags = getResources().getConfiguration().uiMode &
                         Configuration.UI_MODE_NIGHT_MASK;
         return nightModeFlags == Configuration.UI_MODE_NIGHT_YES;
-    }
-
-    private Boolean isNetworkAvailable(NetworkInfo info) {
-        ConnectivityManager connectivityManager =
-                (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Network nw = connectivityManager.getActiveNetwork();
-            if (nw == null) return false;
-            NetworkCapabilities actNw = connectivityManager.getNetworkCapabilities(nw);
-            return actNw != null && (actNw.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                            actNw.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                            actNw.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
-                            actNw.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH));
-        } else {
-            return info != null && info.isConnected();
-        }
-    }
-
-    public String getIpAddress(Context context){
-        NetworkInfo info = ((ConnectivityManager) context
-                .getSystemService(Context.CONNECTIVITY_SERVICE)).getActiveNetworkInfo();
-        if (info != null && isNetworkAvailable(info)) {
-            if (info.getType() == ConnectivityManager.TYPE_ETHERNET){
-                return getLocalIp();
-            } else if (info.getType() == ConnectivityManager.TYPE_WIFI) {
-                WifiManager wifiManager = (WifiManager) context.getApplicationContext()
-                        .getSystemService(Context.WIFI_SERVICE);
-                WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-                return intIP2StringIP(wifiInfo.getIpAddress());
-            }
-        }
-        return "";
-    }
-
-    private static String intIP2StringIP(int ip) {
-        return (ip & 0xFF) + "." +
-                ((ip >> 8) & 0xFF) + "." +
-                ((ip >> 16) & 0xFF) + "." +
-                (ip >> 24 & 0xFF);
-    }
-
-
-    // 获取有限网IP
-    private static String getLocalIp() {
-        try {
-            for (Enumeration<NetworkInterface> en = NetworkInterface
-                    .getNetworkInterfaces(); en.hasMoreElements(); ) {
-                NetworkInterface networkInterface = en.nextElement();
-                for (Enumeration<InetAddress> enumIpAddress = networkInterface
-                        .getInetAddresses(); enumIpAddress.hasMoreElements(); ) {
-                    InetAddress inetAddress = enumIpAddress.nextElement();
-                    if (!inetAddress.isLoopbackAddress()
-                            && inetAddress instanceof Inet4Address) {
-                        return inetAddress.getHostAddress();
-                    }
-                }
-            }
-        } catch (SocketException ex) {
-            Log.e(TAG, "get local ip error: " + ex);
-        }
-        return "0.0.0.0";
     }
 }

@@ -13,7 +13,7 @@
     <RepositoryType>git</RepositoryType>
     <Product>AudioShare</Product>
     <Authors>HeHang</Authors>
-    <Version>1.3.0</Version>
+    <Version>1.4.0</Version>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
   </PropertyGroup>
 
@@ -35,6 +35,12 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="securifybv.ShellLink" Version="0.1.0" />
     <PackageReference Include="sharpadbclient" Version="2.3.23" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0-windows'">
+    <PackageReference Include="NAudio">
+      <Version>2.2.1</Version>
+    </PackageReference>
   </ItemGroup>
 
 </Project>

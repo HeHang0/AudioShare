@@ -11,14 +11,20 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class TcpService extends Service {
     private static final String TAG = "AudioShareService";
@@ -34,8 +40,9 @@ public class TcpService extends Service {
     public void onCreate() {
         super.onCreate();
         Log.i(TAG, "Service on created");
-        new Thread(this::StartLocalServer).start();
-        new Thread(this::StartServer).start();
+        new Thread(this::startLocalServer).start();
+        new Thread(this::startServer).start();
+        startBroadcastTimer();
     }
 
     @Override
@@ -74,9 +81,8 @@ public class TcpService extends Service {
             offset += bytesRead;
         }
         if(new String(buffer).equals(HEAD)){
-            bytesRead = stream.read(buffer, 0, 1);
-            if(bytesRead > 0 && buffer[0] > 0) {
-                return buffer[0];
+            while ((bytesRead = stream.read(buffer, 0, 1)) != -1){
+                if(bytesRead >= 1) return buffer[0];
             }
         }
         return 0;
@@ -116,12 +122,15 @@ public class TcpService extends Service {
 
     private void processSocketClient(Closeable socket) throws IOException {
         InputStream stream;
+        OutputStream outputStream;
         boolean isLocal = false;
         if (socket instanceof LocalSocket){
             stream = ((LocalSocket)socket).getInputStream();
+            outputStream = ((LocalSocket)socket).getOutputStream();
             isLocal = true;
         }else if (socket instanceof Socket){
             stream = ((Socket)socket).getInputStream();
+            outputStream = ((Socket)socket).getOutputStream();
         }else {
             return;
         }
@@ -132,13 +141,10 @@ public class TcpService extends Service {
             int channel = readInt(stream);
             int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
             int bufferSizeInBytes = getMinBufferSize(sampleRate, channel, audioFormat);
-            OutputStream outputStream;
             if(isLocal){
                 ((LocalSocket)socket).setReceiveBufferSize(bufferSizeInBytes);
-                outputStream = ((LocalSocket)socket).getOutputStream();
             }else {
                 ((Socket)socket).setReceiveBufferSize(bufferSizeInBytes);
-                outputStream = ((Socket)socket).getOutputStream();
             }
             new Thread(() -> playAudio(
                     sampleRate,
@@ -151,42 +157,50 @@ public class TcpService extends Service {
             )).start();
         }else {
             processControlStream(command, stream);
-            try {
-                Log.i(TAG, "client connection close");
-                socket.close();
-            } catch (IOException e) {
-                Log.e(TAG, "close client err: " + e);
-            }
+            socket.close();
         }
     }
 
-    private void StartLocalServer(){
+    private void startLocalServer(){
         Log.i(TAG, "prepare start server");
         try {
             localServerSocket = new LocalServerSocket(HEAD);
             while (true){
-                LocalSocket clientSocket = localServerSocket.accept();
-                processSocketClient(clientSocket);
+                LocalSocket clientSocket = null;
+                try {
+                    clientSocket = localServerSocket.accept();
+                    Log.i(TAG, "local server client accept");
+                    processSocketClient(clientSocket);
+                } catch (Exception e) {
+                    if(clientSocket != null){
+                        try {
+                            clientSocket.close();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    Log.e(TAG, "process local client error: " + e);
+                    e.printStackTrace();
+                }
             }
-        } catch (IOException | RuntimeException e) {
-            Log.e(TAG, e.toString());
+        } catch (Exception e) {
+            Log.e(TAG, "start local server error: " + e);
         } finally {
             try {
                 if(localServerSocket != null) {
                     localServerSocket.close();
                 }
             } catch (IOException e) {
-                Log.e(TAG, "start local server error: " + e);
+                Log.e(TAG, "close local server error: " + e);
             }
         }
     }
 
-    private void StartServer(){
+    private void startServer(){
         Log.i(TAG, "prepare start server");
         try {
             int port = 8088;
             for (; port < 65535; port++) {
-                if(!isPortBusy(port)){
+                if(NetworkUtils.checkPortBusy(port)){
                     break;
                 }
             }
@@ -196,11 +210,22 @@ public class TcpService extends Service {
             }
             setListenPort(port);
             while (true){
-                Socket clientSocket = serverSocket.accept();
-                clientSocket.setTcpNoDelay(true);
-                processSocketClient(clientSocket);
+                Socket clientSocket = null;
+                try {
+                    clientSocket = serverSocket.accept();
+                    clientSocket.setTcpNoDelay(true);
+                    processSocketClient(clientSocket);
+                } catch (Exception e) {
+                    if(clientSocket != null){
+                        try {
+                            clientSocket.close();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    Log.e(TAG, "accept tcp server error: " + e);
+                }
             }
-        } catch (IOException | RuntimeException e) {
+        } catch (Exception e) {
             Log.e(TAG, "start tcp server error: " + e);
         } finally {
             try {
@@ -210,15 +235,6 @@ public class TcpService extends Service {
             } catch (IOException e) {
                 Log.e(TAG, "close tcp server error: " + e);
             }
-        }
-    }
-
-    private boolean isPortBusy(int port){
-        try {
-            new ServerSocket(port).close();
-            return false;
-        } catch (Exception ignore) {
-            return true;
         }
     }
 
@@ -260,6 +276,7 @@ public class TcpService extends Service {
             case 48000: size = 7696; break;
             case 44100: size = 7088; break;
         }
+        if(channelConfig == AudioFormat.CHANNEL_OUT_MONO) size /= 2;
         return Math.min(AudioTrack.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat), size);
     }
 
@@ -325,11 +342,36 @@ public class TcpService extends Service {
         }
     }
 
-    private int parseInt(byte[] buffer) {
-        return (buffer[0] & 0xFF) |
-                ((buffer[1] & 0xFF) << 8) |
-                ((buffer[2] & 0xFF) << 16) |
-                ((buffer[3] & 0xFF) << 24);
+    private void startBroadcastTimer(){
+        Timer timer = new Timer();
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                if (getPlaying()) return;
+                try (DatagramSocket socket = new DatagramSocket(0)) {
+                    socket.setBroadcast(true);
+                    InetAddress broadcastAddress = InetAddress.getByName(NetworkUtils.BROADCAST_ADDRESS);
+                    String message = HEAD + "@" + getListenPort();
+                    byte[] data = message.getBytes();
+                    for (int i = 58261; i < 58271; i++) {
+                        DatagramPacket packet = new DatagramPacket(
+                                data, data.length, broadcastAddress, i);
+                        socket.send(packet);
+                    }
+                    Log.i(TAG, "send broadcast " + socket.getLocalPort());
+                } catch (Exception e) {
+                    Log.e(TAG, "send broadcast error");
+                    e.printStackTrace();
+                }
+            }
+        }, 0, 1000L * 10);
+    }
+
+    private int parseInt(@NonNull byte[] data) {
+        return (data[0] & 0xFF) |
+                ((data[1] & 0xFF) << 8) |
+                ((data[2] & 0xFF) << 16) |
+                ((data[3] & 0xFF) << 24);
     }
 
     public class TcpBinder extends Binder {

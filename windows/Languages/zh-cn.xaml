@@ -10,11 +10,13 @@
     <s:String x:Key="unconnected">未连接</s:String>
     <s:String x:Key="audioDeviceSelection">请选择音频设备：</s:String>
     <s:String x:Key="refresh">刷新</s:String>
-    <s:String x:Key="androidDeviceSelection">请选择Android设备：</s:String>
-    <s:String x:Key="remoteAddressEditor">请选择远程地址：</s:String>
+    <s:String x:Key="audioPlaybackDevice">音频播放设备：</s:String>
     <s:String x:Key="volume">音量：</s:String>
     <s:String x:Key="followSystem">跟随系统</s:String>
     <s:String x:Key="apkExistsTips">下载apk至当前目录</s:String>
     <s:String x:Key="apkMisMatch">app未安装或版本不匹配，请手动安装</s:String>
+    <s:String x:Key="adbMisMatch">ADB不存在，请下载至当前目录</s:String>
     <s:String x:Key="or">或</s:String>
+    <s:String x:Key="remove">移除</s:String>
+    <s:String x:Key="add">添加</s:String>
 </ResourceDictionary>
