@@ -408,6 +408,7 @@ namespace AudioShare
             CancellationToken token = SetConnectStatusCancel.Token;
             await Task.Delay(200);
             if (token.IsCancellationRequested) return;
+            Logger.Info("connect status changed start");
             if (status == ConnectStatus.Connected)
             {
                 if(sender != null && sender is Speaker)
@@ -421,6 +422,7 @@ namespace AudioShare
             {
                 ConnectedCount = Speakers.Where(m => m.Connected).Count();
             }
+            Logger.Info("connect status changed end");
             //if(Speakers.Where(m => m.Connected || m.Connecting).Count() == 0)
             //{
             //    AudioManager.StopCapture();

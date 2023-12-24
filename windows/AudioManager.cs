@@ -31,7 +31,8 @@ namespace AudioShare
 
         public static void SetDevice(MMDevice device, int sampleRate)
         {
-            if(_capture != null)
+            Logger.Info("set device start");
+            if (_capture != null)
             {
                 _capture.DataAvailable -= SendAudioData;
             }
@@ -57,25 +58,23 @@ namespace AudioShare
                 StartCapture();
             }
             _device.AudioEndpointVolume.OnVolumeNotification += OnVolumeChange;
+            Logger.Info("set device end");
         }
 
         public static void StartCapture()
         {
-            _dispatcher.Invoke(() =>
+            if(_capture == null) return;
+            try
             {
-                if(_capture == null) return;
-                try
+                if(_capture.CaptureState == CaptureState.Stopped)
                 {
-                    if(_capture.CaptureState == CaptureState.Stopped)
-                    {
-                        _capture.StartRecording();
-                    }
+                    _capture.StartRecording();
                 }
-                catch (Exception)
-                {
+            }
+            catch (Exception)
+            {
 
-                }
-            });
+            }
         }
 
         public static void StopCapture()
@@ -104,6 +103,7 @@ namespace AudioShare
         private static void SendAudioData(object sender, WaveInEventArgs e)
         {
             if(e.BytesRecorded <= 0) return;
+            Logger.Debug("set audio data start");
             StereoAvailable?.Invoke(null, e);
             bool canLeft = LeftAvailable != null;
             bool canRight = RightAvailable != null;
@@ -132,6 +132,7 @@ namespace AudioShare
                     RightAvailable?.Invoke(null, new WaveInEventArgs(bufferRight, bufferRight.Length));
                 });
             }
+            Logger.Debug("set audio data end");
         }
     }
 }

@@ -106,6 +106,7 @@ namespace AudioShare
             if (_connectStatus == connectStatus) return;
             _dispatcher.InvokeAsync(() =>
             {
+                Logger.Info("set connect status start: " + connectStatus);
                 _connectStatus = connectStatus;
                 OnPropertyChanged(nameof(Connected));
                 OnPropertyChanged(nameof(Connecting));
@@ -113,6 +114,7 @@ namespace AudioShare
                 OnPropertyChanged(nameof(IdReadOnly));
                 OnPropertyChanged(nameof(RemoveVisible));
                 OnPropertyChanged(nameof(ChannelEnabled));
+                Logger.Info("set connect status end");
                 ConnectStatusChanged?.Invoke(this, connectStatus);
             });
         }
@@ -144,6 +146,7 @@ namespace AudioShare
             if(Connecting) return;
             DisConnect();
             SetConnectStatus(ConnectStatus.Connecting);
+            Logger.Info("connect start");
             try
             {
                 tcpClient = new TcpClient();
@@ -181,13 +184,14 @@ namespace AudioShare
                 }
                 if (tcpClient.Connected)
                 {
+                    Logger.Info("connect send head");
                     _ = WriteTcp(TCP_HEAD);
                     _ = WriteTcp(new byte[] { (byte)Command.AudioData });
                     var sampleRateBytes = BitConverter.GetBytes(AudioManager.SampleRate);
                     _ = WriteTcp(sampleRateBytes);
                     var channelBytes = BitConverter.GetBytes(_channel == AudioChannel.Stereo ? 12 : 4);
                     _ = WriteTcp(channelBytes);
-                    tcpClient.GetStream().Read(new byte[1], 0, 1);
+                    await tcpClient.GetStream().ReadAsync(new byte[1], 0, 1);
                     tcpClient.SendBufferSize = 1024;
                     _ = _dispatcher.InvokeAsync(() =>
                     {
@@ -213,6 +217,7 @@ namespace AudioShare
             {
                 DisConnect();
             }
+            Logger.Info("connect end");
         }
 
         private void OnAudioStoped(object sender, EventArgs e)
@@ -309,7 +314,9 @@ namespace AudioShare
 
         private void DisConnect(object sender)
         {
+            if (_connectStatus == ConnectStatus.UnConnected) return;
             SetConnectStatus(ConnectStatus.UnConnected);
+            Logger.Info("disconnect start");
             _remoteIP = string.Empty;
             _remotePort = -1;
             try
@@ -321,21 +328,18 @@ namespace AudioShare
             }
             try
             {
-                AudioManager.LeftAvailable -= SendAudioData;
-            }
-            catch (Exception)
-            {
-            }
-            try
-            {
-                AudioManager.RightAvailable -= SendAudioData;
-            }
-            catch (Exception)
-            {
-            }
-            try
-            {
-                AudioManager.StereoAvailable -= SendAudioData;
+                switch (ChannelSelected.Key)
+                {
+                    case AudioChannel.Left:
+                        AudioManager.LeftAvailable -= SendAudioData;
+                        break;
+                    case AudioChannel.Right:
+                        AudioManager.RightAvailable -= SendAudioData;
+                        break;
+                    case AudioChannel.Stereo:
+                        AudioManager.StereoAvailable -= SendAudioData;
+                        break;
+                }
             }
             catch (Exception)
             {
@@ -346,9 +350,10 @@ namespace AudioShare
             }
             catch (Exception ex)
             {
-                Trace.WriteLine("Stop Tcp Error: " + ex.Message);
+                Logger.Error("stop tcp error: " + ex.Message);
             }
             tcpClient = null;
+            Logger.Info("disconnect end");
         }
 
         private void RemoveSpeaker(object sender)
