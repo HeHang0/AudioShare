@@ -15,6 +15,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.io.Closeable;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -35,6 +36,8 @@ public class TcpService extends Service {
     private ServerSocket serverSocket = null;
     private AudioManager mAudioManager = null;
     private int maxAudioVolume = 15;
+
+    private boolean isWriting = false;
 
     @Override
     public void onCreate() {
@@ -280,7 +283,7 @@ public class TcpService extends Service {
         return Math.min(AudioTrack.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat), size);
     }
 
-    private void playAudio(int sampleRateInHz, int channelConfig, int audioFormat, int bufferSizeInBytes, Closeable closer, InputStream stream, OutputStream outputStream){
+    private void playAudio(int sampleRateInHz, int channelConfig, int audioFormat, int bufferSizeInBytes, Closeable closer, InputStream inputStream, OutputStream outputStream){
         if(getPlaying()) return;
         setPlaying(true);
         if(mListener != null){
@@ -295,23 +298,40 @@ public class TcpService extends Service {
                     audioFormat,
                     bufferSizeInBytes, AudioTrack.MODE_STREAM);
             byte[] buffer = new byte[bufferSizeInBytes];
-            int bytesRead;
+            int dataLength;
             audioTrack.play();
             Log.i(TAG, "play audio ready to read");
             outputStream.write(new byte[1]);
             outputStream.flush();
-            while ((bytesRead = stream.read(buffer)) != -1) {
-                if(bytesRead <= 0) continue;
-                audioTrack.write(buffer, 0, bytesRead);
-                audioTrack.flush();
-                audioTrack.play();
+            DataInputStream stream = new DataInputStream(inputStream);
+            while (true) {
+                try {
+                    stream.readFully(buffer, 0, 4);
+                    dataLength = parseInt(buffer);
+                    Log.d(TAG, "send message: " + dataLength);
+                    if(dataLength > buffer.length) {
+                        buffer = new byte[dataLength];
+                    }
+                    stream.readFully(buffer, 0, dataLength);
+                } catch (Exception e){
+                    break;
+                }
+                if(getWriting()) continue;
+                setWriting(true);
+                AudioTrack finalAudioTrack = audioTrack;
+                byte[] finalBuffer = buffer;
+                int finalDataLength = dataLength;
+                new Thread(() -> {
+                    finalAudioTrack.write(finalBuffer, 0, finalDataLength);
+                    setWriting(false);
+                }).start();
             }
         } catch (Exception e) {
             Log.e(TAG, "play audio error: " + e);
             e.printStackTrace();
         } finally {
             try {
-                stream.close();
+                inputStream.close();
             } catch (Exception e) {
                 Log.e(TAG, "stop stream error: " + e);
             }
@@ -340,6 +360,14 @@ public class TcpService extends Service {
         if(mListener != null){
             mListener.onMessage();
         }
+    }
+
+    private synchronized void setWriting(boolean writing) {
+        isWriting = writing;
+    }
+
+    public synchronized boolean getWriting() {
+        return isWriting;
     }
 
     private void startBroadcastTimer(){

@@ -133,7 +133,7 @@ namespace AudioShare
 
         public void Dispose()
         {
-            DisConnect(null);
+            DisConnect();
         }
 
         private void Connect(object sender)
@@ -144,7 +144,7 @@ namespace AudioShare
         public async Task Connect()
         {
             if(Connecting) return;
-            DisConnect();
+            await DisConnect();
             SetConnectStatus(ConnectStatus.Connecting);
             Logger.Info("connect start");
             try
@@ -185,14 +185,13 @@ namespace AudioShare
                 if (tcpClient.Connected)
                 {
                     Logger.Info("connect send head");
-                    _ = WriteTcp(TCP_HEAD);
-                    _ = WriteTcp(new byte[] { (byte)Command.AudioData });
+                    await WriteTcp(TCP_HEAD);
+                    await WriteTcp(new byte[] { (byte)Command.AudioData });
                     var sampleRateBytes = BitConverter.GetBytes(AudioManager.SampleRate);
-                    _ = WriteTcp(sampleRateBytes);
+                    await WriteTcp(sampleRateBytes);
                     var channelBytes = BitConverter.GetBytes(_channel == AudioChannel.Stereo ? 12 : 4);
-                    _ = WriteTcp(channelBytes);
+                    await WriteTcp(channelBytes);
                     await tcpClient.GetStream().ReadAsync(new byte[1], 0, 1);
-                    tcpClient.SendBufferSize = 1024;
                     _ = _dispatcher.InvokeAsync(() =>
                     {
                         AudioManager.StartCapture();
@@ -215,21 +214,32 @@ namespace AudioShare
             }
             catch (Exception)
             {
-                DisConnect();
+                await DisConnect();
             }
             Logger.Info("connect end");
         }
 
         private void OnAudioStoped(object sender, EventArgs e)
         {
-            DisConnect();
+            _ = DisConnect();
         }
 
+        private readonly object writeLock = new object();
+        private bool isBusy = false;
         private async void SendAudioData(object sender, WaveInEventArgs e)
         {
-            if (!(await WriteTcp(e.Buffer, e.BytesRecorded)))
+            lock (writeLock)
             {
-                DisConnect();
+                if(isBusy) return;
+                isBusy = true;
+            }
+            if (!(await WriteTcp(e.Buffer, e.BytesRecorded, true)))
+            {
+                await DisConnect();
+            }
+            lock (writeLock)
+            {
+                isBusy = false;
             }
         }
 
@@ -293,6 +303,7 @@ namespace AudioShare
 
             await Utils.RunAdbShellCommandAsync(adbClient, "rm -f /data/local/tmp/audioshare.apk", device);
             await adbClient.PushAsync(device, apkPath, "/data/local/tmp/audioshare.apk");
+            await Utils.RunAdbShellCommandAsync(adbClient, "/system/bin/pm uninstall com.picapico.audioshare", device);
             await Utils.RunAdbShellCommandAsync(adbClient, "/system/bin/pm install -r /data/local/tmp/audioshare.apk && rm -f /data/local/tmp/audioshare.apk", device);
 
             result = await Utils.RunAdbShellCommandAsync(adbClient, "dumpsys package com.picapico.audioshare|grep versionName", device);
@@ -307,12 +318,7 @@ namespace AudioShare
             return false;
         }
 
-        private void DisConnect()
-        {
-            DisConnect(null);
-        }
-
-        private void DisConnect(object sender)
+        private async Task DisConnect()
         {
             if (_connectStatus == ConnectStatus.UnConnected) return;
             SetConnectStatus(ConnectStatus.UnConnected);
@@ -326,24 +332,27 @@ namespace AudioShare
             catch (Exception)
             {
             }
-            try
+            await _dispatcher.InvokeAsync(() =>
             {
-                switch (ChannelSelected.Key)
+                try
                 {
-                    case AudioChannel.Left:
-                        AudioManager.LeftAvailable -= SendAudioData;
-                        break;
-                    case AudioChannel.Right:
-                        AudioManager.RightAvailable -= SendAudioData;
-                        break;
-                    case AudioChannel.Stereo:
-                        AudioManager.StereoAvailable -= SendAudioData;
-                        break;
+                    switch (ChannelSelected.Key)
+                    {
+                        case AudioChannel.Left:
+                            AudioManager.LeftAvailable -= SendAudioData;
+                            break;
+                        case AudioChannel.Right:
+                            AudioManager.RightAvailable -= SendAudioData;
+                            break;
+                        case AudioChannel.Stereo:
+                            AudioManager.StereoAvailable -= SendAudioData;
+                            break;
+                    }
                 }
-            }
-            catch (Exception)
-            {
-            }
+                catch (Exception)
+                {
+                }
+            });
             try
             {
                 tcpClient?.Close();
@@ -354,6 +363,11 @@ namespace AudioShare
             }
             tcpClient = null;
             Logger.Info("disconnect end");
+        }
+
+        private void DisConnect(object sender)
+        {
+            _ = DisConnect();
         }
 
         private void RemoveSpeaker(object sender)
@@ -374,7 +388,7 @@ namespace AudioShare
             return _connectStatus == ConnectStatus.UnConnected;
         }
 
-        private async Task<bool> WriteTcp(byte[] buffer, int length = 0)
+        private async Task<bool> WriteTcp(byte[] buffer, int length = 0, bool sendLength=false)
         {
             if (length == 0) length = buffer.Length;
             if (length == 0) return true;
@@ -382,6 +396,11 @@ namespace AudioShare
             {
                 if (tcpClient != null)
                 {
+                    if(sendLength)
+                    {
+                        var dataLength = BitConverter.GetBytes(length);
+                        await tcpClient.GetStream().WriteAsync(dataLength, 0, dataLength.Length);
+                    }
                     await tcpClient.GetStream().WriteAsync(buffer, 0, length);
                     await tcpClient.GetStream().FlushAsync();
                     if(length > tcpClient.SendBufferSize)
@@ -391,8 +410,9 @@ namespace AudioShare
                     return true;
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Logger.Error("write tcp error: " + ex.Message);
             }
             return false;
         }
