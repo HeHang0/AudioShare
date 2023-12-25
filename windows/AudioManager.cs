@@ -17,7 +17,7 @@ namespace AudioShare
 
         private static WasapiLoopbackCapture _capture;
         private static MMDevice _device;
-        private static Dispatcher _dispatcher;
+        private static readonly Dispatcher _dispatcher;
         private static int _sampleRate;
 
         static AudioManager()
@@ -45,7 +45,7 @@ namespace AudioShare
             }
             _device = device;
             _sampleRate = sampleRate;
-            if(_device == null)
+            if (_device == null)
             {
                 _capture = null;
                 return;
@@ -63,10 +63,10 @@ namespace AudioShare
 
         public static void StartCapture()
         {
-            if(_capture == null) return;
+            if (_capture == null) return;
             try
             {
-                if(_capture.CaptureState == CaptureState.Stopped)
+                if (_capture.CaptureState == CaptureState.Stopped)
                 {
                     _capture.StartRecording();
                 }
@@ -102,7 +102,7 @@ namespace AudioShare
 
         private static void SendAudioData(object sender, WaveInEventArgs e)
         {
-            if(e.BytesRecorded <= 0) return;
+            if (e.BytesRecorded <= 0) return;
             Logger.Debug("set audio data start");
             StereoAvailable?.Invoke(null, e);
             bool canLeft = LeftAvailable != null;
@@ -115,7 +115,7 @@ namespace AudioShare
                     j < e.BytesRecorded / 2;
                     i += 4, j += 2)
                 {
-                    if(canLeft)
+                    if (canLeft)
                     {
                         bufferLeft[j] = e.Buffer[i];
                         bufferLeft[j + 1] = e.Buffer[i + 1];

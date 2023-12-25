@@ -6,10 +6,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -24,7 +22,7 @@ namespace AudioShare
             None = 0,
             AudioData = 1,
             Volume = 2,
-            SampleRate = 3
+            SyncTime = 3
         }
         public event PropertyChangedEventHandler PropertyChanged;
         public event EventHandler<Speaker> Remove;
@@ -85,19 +83,19 @@ namespace AudioShare
             _dispatcher = dispatcher;
         }
 
-        public Speaker(Dispatcher dispatcher, string id):this(dispatcher, id, AudioChannel.None)
+        public Speaker(Dispatcher dispatcher, string id) : this(dispatcher, id, AudioChannel.None)
         {
         }
 
-        public Speaker(Dispatcher dispatcher, string id, AudioChannel channel): this(dispatcher, id, string.Empty, channel, false)
+        public Speaker(Dispatcher dispatcher, string id, AudioChannel channel) : this(dispatcher, id, string.Empty, channel, false)
         {
         }
 
-        public Speaker(Dispatcher dispatcher, string id, string name): this(dispatcher, id, name, AudioChannel.None)
+        public Speaker(Dispatcher dispatcher, string id, string name) : this(dispatcher, id, name, AudioChannel.None)
         {
         }
 
-        public Speaker(Dispatcher dispatcher, string id, string name, AudioChannel channel): this(dispatcher, id, name, channel, true)
+        public Speaker(Dispatcher dispatcher, string id, string name, AudioChannel channel) : this(dispatcher, id, name, channel, true)
         {
         }
 
@@ -128,12 +126,17 @@ namespace AudioShare
         public void SetVolume(int volume)
         {
             byte[] volumeBytes = BitConverter.GetBytes(volume);
-            RequestTcp(Command.Volume, volumeBytes);
+            _ = RequestTcp(Command.Volume, volumeBytes);
+        }
+
+        public void SyncTime()
+        {
+            _ = RequestTcp(Command.SyncTime);
         }
 
         public void Dispose()
         {
-            DisConnect();
+            _ = DisConnect();
         }
 
         private void Connect(object sender)
@@ -143,7 +146,7 @@ namespace AudioShare
 
         public async Task Connect()
         {
-            if(Connecting) return;
+            if (Connecting) return;
             await DisConnect();
             SetConnectStatus(ConnectStatus.Connecting);
             Logger.Info("connect start");
@@ -230,7 +233,7 @@ namespace AudioShare
         {
             lock (writeLock)
             {
-                if(isBusy) return;
+                if (isBusy) return;
                 isBusy = true;
             }
             if (!(await WriteTcp(e.Buffer, e.BytesRecorded, true)))
@@ -312,7 +315,7 @@ namespace AudioShare
                 await Utils.RunAdbShellCommandAsync(adbClient, "am start -W -n com.picapico.audioshare/.MainActivity", device);
                 return true;
             }
-            MessageBox.Show(Application.Current.MainWindow, 
+            MessageBox.Show(Application.Current.MainWindow,
                 Languages.Language.GetLanguageText("apkMisMatch"),
                 Application.Current.MainWindow.Title);
             return false;
@@ -388,7 +391,7 @@ namespace AudioShare
             return _connectStatus == ConnectStatus.UnConnected;
         }
 
-        private async Task<bool> WriteTcp(byte[] buffer, int length = 0, bool sendLength=false)
+        private async Task<bool> WriteTcp(byte[] buffer, int length = 0, bool sendLength = false)
         {
             if (length == 0) length = buffer.Length;
             if (length == 0) return true;
@@ -396,14 +399,14 @@ namespace AudioShare
             {
                 if (tcpClient != null)
                 {
-                    if(sendLength)
+                    if (sendLength)
                     {
                         var dataLength = BitConverter.GetBytes(length);
                         await tcpClient.GetStream().WriteAsync(dataLength, 0, dataLength.Length);
                     }
                     await tcpClient.GetStream().WriteAsync(buffer, 0, length);
                     await tcpClient.GetStream().FlushAsync();
-                    if(length > tcpClient.SendBufferSize)
+                    if (length > tcpClient.SendBufferSize)
                     {
                         tcpClient.SendBufferSize = length;
                     }
@@ -417,16 +420,20 @@ namespace AudioShare
             return false;
         }
 
-        private async void RequestTcp(Command command, byte[] data)
+        private async Task RequestTcp(Command command, byte[] data = null)
         {
-            if (UnConnected || Connecting || string.IsNullOrWhiteSpace(_remoteIP) || _remotePort <= 0) return;
+            if (command == Command.None || UnConnected || Connecting || string.IsNullOrWhiteSpace(_remoteIP) || _remotePort <= 0) return;
             TcpClient client = new TcpClient();
+            client.SendTimeout = 1000;
             try
             {
                 await client.ConnectAsync(_remoteIP, _remotePort);
                 client.GetStream().Write(TCP_HEAD, 0, TCP_HEAD.Length);
                 client.GetStream().Write(new byte[] { (byte)command }, 0, 1);
-                client.GetStream().Write(data, 0, data.Length);
+                if (data != null && data.Length > 0)
+                {
+                    client.GetStream().Write(data, 0, data.Length);
+                }
                 await client.GetStream().FlushAsync();
                 await client.GetStream().ReadAsync(new byte[1], 0, 1);
             }

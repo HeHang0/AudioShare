@@ -1,13 +1,10 @@
 ﻿using SharpAdbClient;
-using SharpAdbClient.DeviceCommands;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -16,7 +13,7 @@ namespace AudioShare
 {
     public static class Utils
     {
-        private static string _versionName = string.Empty;
+        private static readonly string _versionName = string.Empty;
         public static string VersionName => _versionName;
 
         static Utils()
@@ -26,7 +23,7 @@ namespace AudioShare
             _versionName = $"{version.Major}.{version.Minor}.{version.Build}";
         }
 
-        public static Task<bool> PortIsOpen(int port, int timeout=1000)
+        public static Task<bool> PortIsOpen(int port, int timeout = 1000)
         {
             return PortIsOpen("127.0.0.1", port, timeout);
         }
@@ -48,7 +45,7 @@ namespace AudioShare
             }
         }
 
-        public static async Task<int> GetFreePort(int port=8088)
+        public static async Task<int> GetFreePort(int port = 8088)
         {
             for (; port < 65535; port++)
             {
@@ -103,7 +100,7 @@ namespace AudioShare
             var forwards = client.ListForward(device);
             foreach (var forward in forwards)
             {
-                if(forward.SerialNumber == device.Serial && forward.Remote == remote)
+                if (forward.SerialNumber == device.Serial && forward.Remote == remote)
                 {
                     client.RemoveForward(device, forward.LocalSpec.Port);
                 }
@@ -125,7 +122,7 @@ namespace AudioShare
         public static async Task PushAsync(this IAdbClient client, DeviceData device, string filePath, string remotePath)
         {
             string adbPath = FindAdbPath();
-            if(!string.IsNullOrWhiteSpace(adbPath))
+            if (!string.IsNullOrWhiteSpace(adbPath))
             {
                 await RunCommandAsync(adbPath, $"-s {device.Serial} push \"{filePath}\" {remotePath}");
             }

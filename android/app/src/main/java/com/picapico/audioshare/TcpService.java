@@ -14,6 +14,8 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.phicomm.speaker.player.light.PlayerVisualizer;
+
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -109,9 +111,9 @@ public class TcpService extends Service {
         if(command == 2){
             try {
                 int volume = readInt(stream);
-                Log.i(TAG, "set music volume " + volume);
                 if(mAudioManager != null){
                     volume = maxAudioVolume * volume / 100;
+                    setVolume(volume);
                     mAudioManager.setStreamVolume(
                             AudioManager.STREAM_MUSIC,
                             volume,
@@ -120,6 +122,19 @@ public class TcpService extends Service {
             } catch (IOException e) {
                 Log.e(TAG, "read volume error: " + e);
             }
+        }else if(command == 3) {
+            PlayerVisualizer.updateTimeMillis();
+        }
+    }
+
+    private void setVolume(int volume) {
+        try {
+            Log.i(TAG, "set music volume " + volume);
+            mAudioManager.setStreamVolume(
+                    AudioManager.STREAM_MUSIC,
+                    volume,
+                    AudioManager.FLAG_SHOW_UI);
+        } catch (Exception ignored){
         }
     }
 
@@ -201,12 +216,7 @@ public class TcpService extends Service {
     private void startServer(){
         Log.i(TAG, "prepare start server");
         try {
-            int port = 8088;
-            for (; port < 65535; port++) {
-                if(NetworkUtils.checkPortBusy(port)){
-                    break;
-                }
-            }
+            int port = NetworkUtils.getFreePort();
             serverSocket = new ServerSocket(port);
             if(mListener != null){
                 mListener.onMessage();
@@ -290,6 +300,7 @@ public class TcpService extends Service {
             mListener.onMessage();
         }
         AudioTrack audioTrack = null;
+        PlayerVisualizer playerVisualizer = null;
         try {
             audioTrack = new AudioTrack(
                     AudioManager.STREAM_MUSIC,
@@ -297,9 +308,11 @@ public class TcpService extends Service {
                     channelConfig,
                     audioFormat,
                     bufferSizeInBytes, AudioTrack.MODE_STREAM);
+            setVolume(0);
             byte[] buffer = new byte[bufferSizeInBytes];
             int dataLength;
             audioTrack.play();
+            playerVisualizer = new PlayerVisualizer(audioTrack.getAudioSessionId());
             Log.i(TAG, "play audio ready to read");
             outputStream.write(new byte[1]);
             outputStream.flush();
@@ -308,7 +321,6 @@ public class TcpService extends Service {
                 try {
                     stream.readFully(buffer, 0, 4);
                     dataLength = parseInt(buffer);
-                    Log.d(TAG, "send message: " + dataLength);
                     if(dataLength > buffer.length) {
                         buffer = new byte[dataLength];
                     }
@@ -330,6 +342,9 @@ public class TcpService extends Service {
             Log.e(TAG, "play audio error: " + e);
             e.printStackTrace();
         } finally {
+            if(playerVisualizer != null) {
+                playerVisualizer.stop();
+            }
             try {
                 inputStream.close();
             } catch (Exception e) {

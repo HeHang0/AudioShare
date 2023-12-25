@@ -1,10 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace AudioShare
 {
@@ -24,7 +20,7 @@ namespace AudioShare
             var stacktrace = new StackTrace(skipFrames: 2, fNeedFileInfo: true);
             var frame = stacktrace.GetFrame(0);
             string stack = "";
-            if(frame != null)
+            if (frame != null)
             {
                 stack = $"{Path.GetFileName(frame.GetFileName())}:{frame.GetFileLineNumber()}:{frame.GetMethod()?.Name}";
             }

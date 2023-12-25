@@ -25,16 +25,19 @@ public class NetworkUtils {
     public static boolean checkPortBusy(int port){
         try {
             new ServerSocket(port).close();
-            return true;
-        } catch (Exception ignore) {
             return false;
+        } catch (Exception ignore) {
+            return true;
         }
     }
 
     public static int getFreePort(){
-        int port = 8088;
+        return getFreePort(8088);
+    }
+
+    public static int getFreePort(int port){
         for (; port < 65535; port++) {
-            if(checkPortBusy(port)){
+            if(!checkPortBusy(port)){
                 break;
             }
         }

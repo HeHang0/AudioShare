@@ -7,9 +7,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Net.Sockets;
-using System.Runtime;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,7 +17,7 @@ using NamePair = System.Collections.Generic.KeyValuePair<string, string>;
 
 namespace AudioShare
 {
-    public class Model: INotifyPropertyChanged
+    public class Model : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
         private readonly Settings _settings = Settings.Load();
@@ -55,7 +53,7 @@ namespace AudioShare
                 string message = Encoding.UTF8.GetString(result.Buffer);
                 var messages = message.Split('@');
                 if (messages.Length != 2 || messages[0] != "picapico-audio-share") continue;
-                if(int.TryParse(messages[1], out int port) && port > 0 && port < 65535)
+                if (int.TryParse(messages[1], out int port) && port > 0 && port < 65535)
                 {
                     _dispatcher.Invoke(() =>
                     {
@@ -63,11 +61,11 @@ namespace AudioShare
                     });
                 }
             }
-        } 
+        }
 
         private void OnVolumeChanged(object sender, int volume)
         {
-            if(VolumeFollowSystem) Volume = volume;
+            if (VolumeFollowSystem) Volume = volume;
         }
 
         private readonly List<MMDevice> _audioDevices = new List<MMDevice>();
@@ -103,6 +101,16 @@ namespace AudioShare
             {
                 _settings.AudioId = value.Key;
                 var mDevice = _audioDevices.FirstOrDefault(m => m.ID == _settings.AudioId);
+                if (VolumeFollowSystem)
+                {
+                    try
+                    {
+                        Volume = mDevice.AudioEndpointVolume.Mute ? 0 : (int)(mDevice.AudioEndpointVolume.MasterVolumeLevelScalar * 100);
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
                 Stop();
                 AudioManager.SetDevice(mDevice, _settings.SampleRate);
                 OnPropertyChanged(nameof(AudioSelected));
@@ -200,7 +208,7 @@ namespace AudioShare
             }
         }
 
-        AdbClient _adbClient = new AdbClient();
+        readonly AdbClient _adbClient = new AdbClient();
         public async Task RefreshSpeakers()
         {
             var connectedSpeakers = Speakers.Where(speaker => speaker.Connected).ToList();
@@ -220,7 +228,7 @@ namespace AudioShare
                 Speakers.Clear();
                 foreach (var item in devices)
                 {
-                    if(item.State != SharpAdbClient.DeviceState.Online) continue;
+                    if (item.State != SharpAdbClient.DeviceState.Online) continue;
                     var connectedSpeaker = connectedSpeakers.FirstOrDefault(m => m.Id == item.Serial);
                     if (connectedSpeaker != null)
                     {
@@ -261,7 +269,7 @@ namespace AudioShare
             }
             foreach (var speaker in connectedSpeakers)
             {
-                if(!Speakers.Any(m => m.Id == speaker.Id))
+                if (!Speakers.Any(m => m.Id == speaker.Id))
                 {
                     speaker.Dispose();
                 }
@@ -274,7 +282,7 @@ namespace AudioShare
             for (int i = 2; i < 255; i++)
             {
                 string id = $"192.168.1.{i}:8088";
-                if(!_settings.IPDevices.Any(m => m.Id == id))
+                if (!_settings.IPDevices.Any(m => m.Id == id))
                 {
                     _settings.IPDevices.Add(new Settings.Device(id, AudioChannel.None));
                     var speaker = new Speaker(_dispatcher, id, AudioChannel.None);
@@ -344,7 +352,7 @@ namespace AudioShare
             {
                 _audioDevices.Add(device);
                 AudioDevices.Add(new NamePair(device.ID, device.FriendlyName));
-                if(_settings.AudioId == device.ID) mDevice = device;
+                if (_settings.AudioId == device.ID) mDevice = device;
             }
             if (mDevice == null) mDevice = devices.FirstOrDefault();
             AudioSelected = new NamePair(mDevice?.ID, mDevice?.FriendlyName);
@@ -411,9 +419,14 @@ namespace AudioShare
             Logger.Info("connect status changed start");
             if (status == ConnectStatus.Connected)
             {
-                if(sender != null && sender is Speaker)
+                if (sender != null && sender is Speaker)
                 {
                     ((Speaker)sender).SetVolume(Volume);
+                }
+                List<Speaker> allConnected = Speakers.Where(speaker => speaker.Connected).ToList();
+                foreach (var speaker in allConnected)
+                {
+                    if (speaker.Connected) speaker.SyncTime();
                 }
                 ResetSpeakerSetting();
                 _settings.Save();

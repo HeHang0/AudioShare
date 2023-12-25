@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO.Pipes;
-using System.Text;
 using System.Windows;
 
 namespace AudioShare
