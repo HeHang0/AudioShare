@@ -1,13 +1,19 @@
-﻿using SharpAdbClient;
+﻿using Microsoft.VisualBasic;
+using SharpAdbClient;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace AudioShare
 {
@@ -153,6 +159,58 @@ namespace AudioShare
         {
             await RunCommandAsync(adbPath, "start-server");
             await RunCommandAsync(adbPath, "devices");
+        }
+
+        public static ImageSource AppIcon
+        {
+            get
+            {
+                Icon appIcon = Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetExecutingAssembly().Location);
+                if (appIcon != null)
+                {
+                    return Imaging.CreateBitmapSourceFromHIcon(
+                        appIcon.Handle,
+                        Int32Rect.Empty,
+                        BitmapSizeOptions.FromEmptyOptions());
+                }
+
+                return null;
+            }
+        }
+
+        public static bool IsAcrylicSupported => IsWindowsNT && OSVersion >= new Version(10, 0) && OSVersion < new Version(10, 0, 22523);
+
+        public static bool IsMicaSupported => IsWindowsNT && OSVersion >= new Version(10, 0, 21996);
+
+        public static bool IsMicaTabbedSupported => IsWindowsNT && OSVersion >= new Version(10, 0, 22523);
+
+        public static bool IsWindowsNT => Environment.OSVersion.Platform == PlatformID.Win32NT;
+
+        private static readonly Version _osVersion = GetOSVersion();
+
+        public static Version OSVersion => _osVersion;
+
+        private static Version GetOSVersion()
+        {
+            var osv = new RTL_OSVERSIONINFOEX();
+            osv.dwOSVersionInfoSize = (uint)Marshal.SizeOf(osv);
+            _ = RtlGetVersion(out osv);
+            return new Version((int)osv.dwMajorVersion, (int)osv.dwMinorVersion, (int)osv.dwBuildNumber);
+        }
+
+        [DllImport("ntdll.dll")]
+        private static extern int RtlGetVersion(out RTL_OSVERSIONINFOEX lpVersionInformation);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RTL_OSVERSIONINFOEX
+        {
+            internal uint dwOSVersionInfoSize;
+            internal uint dwMajorVersion;
+            internal uint dwMinorVersion;
+            internal uint dwBuildNumber;
+            internal uint dwPlatformId;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            internal string szCSDVersion;
         }
     }
 }

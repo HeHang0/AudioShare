@@ -5,9 +5,11 @@
     <s:String x:Key="startup">开机启动</s:String>
     <s:String x:Key="exit">退出</s:String>
     <s:String x:Key="connecte">连接</s:String>
+    <s:String x:Key="reconnecte">重新连接</s:String>
     <s:String x:Key="disconnecte">断开</s:String>
     <s:String x:Key="connected">已连接</s:String>
     <s:String x:Key="unconnected">未连接</s:String>
+    <s:String x:Key="disconnected">已断开</s:String>
     <s:String x:Key="audioDeviceSelection">请选择音频设备：</s:String>
     <s:String x:Key="refresh">刷新</s:String>
     <s:String x:Key="audioPlaybackDevice">音频播放设备：</s:String>

@@ -1,4 +1,5 @@
-﻿using NAudio.Wave;
+﻿using Microsoft.Toolkit.Uwp.Notifications;
+using NAudio.Wave;
 using SharpAdbClient;
 using System;
 using System.Collections.ObjectModel;
@@ -45,6 +46,7 @@ namespace AudioShare
         private readonly bool _isUSB = false;
         private readonly string _name = string.Empty;
         private string _id = string.Empty;
+        private bool _disposed = false;
         private readonly Dispatcher _dispatcher;
 
         public string Id => _id;
@@ -104,6 +106,23 @@ namespace AudioShare
             if (_connectStatus == connectStatus) return;
             _dispatcher.InvokeAsync(() =>
             {
+                if (connectStatus == ConnectStatus.Connected && _connectStatus != connectStatus)
+                {
+                    new ToastContentBuilder()
+                        .AddText($"{Display} {Languages.Language.GetLanguageText("connected")}")
+                        .Show();
+                }
+                else if (connectStatus == ConnectStatus.UnConnected && _connectStatus != connectStatus)
+                {
+                    var builder = new ToastContentBuilder()
+                        .AddText($"{Display} {Languages.Language.GetLanguageText("disconnected")}");
+                    if (!_disposed)
+                    {
+                        builder.AddButton(Languages.Language.GetLanguageText("reconnecte"), ToastActivationType.Foreground, _id);
+                        builder.SetToastDuration(ToastDuration.Long);
+                    }
+                    builder.Show();
+                }
                 Logger.Info("set connect status start: " + connectStatus);
                 _connectStatus = connectStatus;
                 OnPropertyChanged(nameof(Connected));
@@ -136,6 +155,7 @@ namespace AudioShare
 
         public void Dispose()
         {
+            _disposed = true;
             _ = DisConnect();
         }
 
@@ -147,6 +167,7 @@ namespace AudioShare
         public async Task Connect()
         {
             if (Connecting) return;
+            _disposed = false;
             await DisConnect();
             SetConnectStatus(ConnectStatus.Connecting);
             Logger.Info("connect start");

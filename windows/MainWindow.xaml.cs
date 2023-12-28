@@ -5,7 +5,10 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
+using Wpf.Ui.Controls;
 using NotifyIcon = System.Windows.Forms.NotifyIcon;
 
 namespace AudioShare
@@ -13,8 +16,9 @@ namespace AudioShare
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow : UiWindow
     {
+
         private NotifyIcon notifyIcon;
         private ResourceDictionary zhRD;
         private ResourceDictionary enRD;
@@ -23,14 +27,46 @@ namespace AudioShare
         public MainWindow()
         {
             InitializeComponent();
-            InitLanguage();
-            Title += " " + Utils.VersionName;
+            InitWindowBackdropType();
             _model = new Model();
+            InitLanguage();
             DataContext = _model;
             Loaded += MainWindow_Loaded;
             Closing += MainWindow_Closing;
             InitNotify();
             InitNamedPipeServerStream();
+        }
+
+        private void InitWindowBackdropType()
+        {
+            if (Utils.IsMicaTabbedSupported)
+            {
+                WindowBackdropType = Wpf.Ui.Appearance.BackgroundType.Tabbed;
+            }
+            else if (Utils.IsMicaSupported)
+            {
+                WindowBackdropType = Wpf.Ui.Appearance.BackgroundType.Mica;
+            }
+            else if (Utils.IsAcrylicSupported)
+            {
+                WindowStyle = WindowStyle.None;
+                AllowsTransparency = true;
+                DragHelper.Visibility = Visibility.Visible;
+                DragHelper.PreviewMouseLeftButtonDown += DragWindow;
+                WindowBackdropType = Wpf.Ui.Appearance.BackgroundType.Acrylic;
+            }
+            else
+            {
+                WindowBackdropType = Wpf.Ui.Appearance.BackgroundType.Auto;
+            }
+        }
+
+        private void DragWindow(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (WindowStyle == WindowStyle.None)
+            {
+                DragMove();
+            }
         }
 
         private async void InitNamedPipeServerStream()
@@ -66,6 +102,7 @@ namespace AudioShare
             if (e.Category == UserPreferenceCategory.Locale)
             {
                 SetLanguage(System.Globalization.CultureInfo.InstalledUICulture.Name.ToLower().Contains("zh"));
+                _model.UpdateTitle();
             }
         }
 
@@ -117,6 +154,12 @@ namespace AudioShare
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            Wpf.Ui.Appearance.Watcher.Watch(
+                this,
+                Wpf.Ui.Appearance.BackgroundType.Mica,
+                true,
+                true
+            );
             WindowState = WindowState.Minimized;
             _model.RefreshAudios();
             await _model.RefreshSpeakers();

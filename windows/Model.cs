@@ -1,4 +1,5 @@
-﻿using NAudio.CoreAudioApi;
+﻿using Microsoft.Toolkit.Uwp.Notifications;
+using NAudio.CoreAudioApi;
 using SharpAdbClient;
 using System;
 using System.Collections.Generic;
@@ -11,9 +12,12 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
 using DeviceState = NAudio.CoreAudioApi.DeviceState;
 using NamePair = System.Collections.Generic.KeyValuePair<string, string>;
+using SampleRatePair = System.Collections.Generic.KeyValuePair<int, string>;
 
 namespace AudioShare
 {
@@ -28,7 +32,17 @@ namespace AudioShare
         {
             _dispatcher = Dispatcher.CurrentDispatcher;
             AudioManager.OnVolumeNotification += OnVolumeChanged;
+            ToastNotificationManagerCompat.OnActivated += OnToastActivated;
             ConnectUdp();
+        }
+
+        private void OnToastActivated(ToastNotificationActivatedEventArgsCompat e)
+        {
+            var speaker = Speakers.FirstOrDefault(m => m.UnConnected && m.Id == e.Argument);
+            if (speaker != null)
+            {
+                _ = speaker.Connect();
+            }
         }
 
         private async void ConnectUdp()
@@ -71,7 +85,21 @@ namespace AudioShare
         private readonly List<MMDevice> _audioDevices = new List<MMDevice>();
         public ObservableCollection<NamePair> AudioDevices { get; private set; } = new ObservableCollection<NamePair>();
         public ObservableCollection<Speaker> Speakers { get; private set; } = new ObservableCollection<Speaker>();
-        public int[] SampleRates => new int[] { 192000, 176400, 96000, 48000, 44100 };
+        public ObservableCollection<SampleRatePair> SampleRates => new ObservableCollection<SampleRatePair>()
+        {
+            //192000, 176400, 96000, 48000, 44100
+            new SampleRatePair(192000, "192kHz"),
+            new SampleRatePair(176400, "176.4kHz"),
+            new SampleRatePair(96000, "96kHz"),
+            new SampleRatePair(48000, "48kHz"),
+            new SampleRatePair(44100, "44.1kHz"),
+        };
+        public ImageSource Icon => Utils.AppIcon;
+        public string Title => Languages.Language.GetLanguageText("title") + " " + Utils.VersionName;
+        public void UpdateTitle()
+        {
+            OnPropertyChanged(nameof(Title));
+        }
         public bool IsStartup
         {
             get => IsStartupEnabled();
@@ -116,12 +144,12 @@ namespace AudioShare
                 OnPropertyChanged(nameof(AudioSelected));
             }
         }
-        public int SampleRate
+        public SampleRatePair SampleRate
         {
-            get => _settings.SampleRate;
+            get => SampleRates.FirstOrDefault(m => m.Key == _settings.SampleRate);
             set
             {
-                _settings.SampleRate = value;
+                _settings.SampleRate = value.Key;
                 var mDevice = _audioDevices.FirstOrDefault(m => m.ID == _settings.AudioId);
                 Stop();
                 AudioManager.SetDevice(mDevice, _settings.SampleRate);
@@ -162,7 +190,16 @@ namespace AudioShare
                 if (_settings.IsUSB == value) return;
                 ResetSpeakerSetting();
                 _settings.IsUSB = value;
-                _ = RefreshSpeakers();
+                if (value && string.IsNullOrWhiteSpace(Utils.FindAdbPath()))
+                {
+                    _settings.IsUSB = false;
+                    MessageBox.Show(Application.Current.MainWindow, Languages.Language.GetLanguageText("adbMisMatch"),
+                        Application.Current.MainWindow.Title);
+                }
+                else
+                {
+                    _ = RefreshSpeakers();
+                }
                 OnPropertyChanged(nameof(IsUSB));
                 OnPropertyChanged(nameof(IsIP));
                 OnPropertyChanged(nameof(AddIPSpeakerVisible));
@@ -184,6 +221,20 @@ namespace AudioShare
             set
             {
                 _settings.VolumeFollowSystem = value;
+                if (value)
+                {
+                    var mDevice = _audioDevices.FirstOrDefault(m => m.ID == _settings.AudioId);
+                    if (VolumeFollowSystem)
+                    {
+                        try
+                        {
+                            Volume = mDevice.AudioEndpointVolume.Mute ? 0 : (int)(mDevice.AudioEndpointVolume.MasterVolumeLevelScalar * 100);
+                        }
+                        catch (Exception)
+                        {
+                        }
+                    }
+                }
                 OnPropertyChanged(nameof(VolumeCustom));
             }
         }

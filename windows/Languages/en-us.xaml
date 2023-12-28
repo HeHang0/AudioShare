@@ -5,9 +5,11 @@
     <s:String x:Key="startup">Startup</s:String>
     <s:String x:Key="exit">Exit</s:String>
     <s:String x:Key="connecte">Connecte</s:String>
+    <s:String x:Key="reconnecte">Reconnecte</s:String>
     <s:String x:Key="disconnecte">Disconnecte</s:String>
     <s:String x:Key="connected">Connected</s:String>
     <s:String x:Key="unconnected">Not Connected</s:String>
+    <s:String x:Key="disconnected">disconnected</s:String>
     <s:String x:Key="audioDeviceSelection">Please select an audio device: </s:String>
     <s:String x:Key="refresh">Refresh</s:String>
     <s:String x:Key="audioPlaybackDevice">Audio playback device: </s:String>
