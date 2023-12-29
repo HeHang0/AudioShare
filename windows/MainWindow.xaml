@@ -10,7 +10,13 @@
         Title="{DynamicResource title}" Height="360" Width="500" ResizeMode="NoResize"
              ExtendsContentIntoTitleBar="True"
              WindowCornerPreference="Round">
-    <Grid>
+    <ui:UiWindow.Resources>
+        <Style TargetType="ui:Button" BasedOn="{StaticResource DefaultUiButtonStyle}">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="PressedForeground" Value="White" />
+        </Style>
+    </ui:UiWindow.Resources>
+    <Grid x:Name="WinBackground">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -25,11 +31,11 @@
                     <ui:ToggleSwitch IsChecked="{Binding IsStartup}" Width="40" Height="20" VerticalAlignment="Bottom"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Border Width="10" Height="10" Margin="0 0 5 2" Background="Green" CornerRadius="50" VerticalAlignment="Bottom"
+                    <Border Width="10" Height="10" Margin="0 0 5 3" Background="Green" CornerRadius="50" VerticalAlignment="Bottom"
                             Visibility="{Binding Connected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
                     <Label Content="{DynamicResource connected}" Padding="0" VerticalAlignment="Bottom"
                            Visibility="{Binding Connected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
-                    <Border Width="10" Height="10" Margin="0 0 5 2" Background="Red" CornerRadius="50" VerticalAlignment="Bottom"
+                    <Border Width="10" Height="10" Margin="0 0 5 3" Background="Red" CornerRadius="50" VerticalAlignment="Bottom"
                             Visibility="{Binding UnConnected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
                     <Label Content="{DynamicResource unconnected}" Padding="0" VerticalAlignment="Bottom"
                            Visibility="{Binding UnConnected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
@@ -49,7 +55,7 @@
                 <ComboBox Height="30" Width="80" Margin="10 0 0 0" Padding="6 6 0 6" ItemsSource="{Binding SampleRates}"
                           VerticalAlignment="Center" DisplayMemberPath="Value"
                           SelectedValue="{Binding SampleRate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                <ui:Button Foreground="White" Appearance="Info" Height="30" Width="80" Content="{DynamicResource refresh}"
+                <ui:Button Appearance="Info" Height="30" Width="80" Content="{DynamicResource refresh}"
                            Margin="10 0 0 0" Command="{Binding RefreshAudiosCommand}"/>
             </StackPanel>
             <Grid Width="400" Margin="0 5 0 0">
@@ -60,7 +66,7 @@
                             <Label Content="USB" Margin="0 0 5 0" VerticalContentAlignment="Bottom" Padding="0"/>
                             <ui:ToggleSwitch IsChecked="{Binding IsUSB}" Width="40" Height="20" VerticalAlignment="Bottom"/>
                             <Grid Margin="10 0 0 0" Visibility="{Binding IsUSB, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
-                                <ui:Button Foreground="White" Appearance="Info" Grid.Column="1" Height="30" Width="80"
+                                <ui:Button Appearance="Info" Grid.Column="1" Height="30" Width="80"
                                             Content="{DynamicResource refresh}"
                                             Command="{Binding RefreshSpeakersCommand}"/>
                                 <ui:ProgressRing IsIndeterminate="True" Progress="70" Visibility="{Binding AdbLoading, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"
@@ -139,14 +145,14 @@
                                         Visibility="{Binding RemoveVisible, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
                                             </Grid>
                                             <Grid Visibility="{Binding UnConnected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
-                                                <ui:Button Foreground="White" Appearance="Info"  Height="30" Width="80" Margin="10 0 0 0"
+                                                <ui:Button Appearance="Info"  Height="30" Width="80" Margin="10 0 0 0"
                                                 Content="{DynamicResource connecte}" IsEnabled="{Binding ConnectEnabled}"
                                                 Command="{Binding ConnectCommand}"/>
                                                 <ui:ProgressRing IsIndeterminate="True" Visibility="{Binding Connecting, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"
                                                                 Width="10" Height="10" Progress="70" Padding="3" Margin="20,5,0,5"
                                                                 HorizontalAlignment="Left" VerticalAlignment="Stretch" />
                                             </Grid>
-                                            <ui:Button Foreground="White" Appearance="Caution" Height="30" Width="80" Margin="10 0 0 0"
+                                            <ui:Button Appearance="Caution" Height="30" Width="80" Margin="10 0 0 0"
                                                 Content="{DynamicResource disconnecte}"
                                                 Command="{Binding DisConnectCommand}"
                                                 Visibility="{Binding Connected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
@@ -155,7 +161,7 @@
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
                             </ListView>
-                            <ui:Button Foreground="White" Appearance="Info" Height="30" Width="400" Content="{DynamicResource add}" Command="{Binding AddIPSpeakerCommand}"
+                            <ui:Button Appearance="Info" Height="30" Width="400" Content="{DynamicResource add}" Command="{Binding AddIPSpeakerCommand}"
                             Visibility="{Binding AddIPSpeakerVisible, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}" />
                         </StackPanel>
                     </ScrollViewer>
@@ -170,7 +176,7 @@
                 <Label Content="{DynamicResource followSystem}" Margin="5 0 5 0" VerticalAlignment="Bottom" Padding="0"/>
                 <ui:ToggleSwitch IsChecked="{Binding VolumeFollowSystem}" Width="40" Height="20" VerticalAlignment="Bottom"/>
             </StackPanel>
-            <ui:Button Foreground="White" Appearance="Danger"  Height="30" Width="400" Margin="0 10 0 0"
+            <ui:Button Appearance="Danger"  Height="30" Width="400" Margin="0 10 0 0"
                        Content="{DynamicResource exit}" Click="Exit" />
         </StackPanel>
     </Grid>

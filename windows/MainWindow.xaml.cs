@@ -1,4 +1,5 @@
 ﻿using Microsoft.Win32;
+using PicaPico;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -8,6 +9,8 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media;
+using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
 using NotifyIcon = System.Windows.Forms.NotifyIcon;
 
@@ -41,11 +44,11 @@ namespace AudioShare
         {
             if (Utils.IsMicaTabbedSupported)
             {
-                WindowBackdropType = Wpf.Ui.Appearance.BackgroundType.Tabbed;
+                WindowBackdropType = BackgroundType.Tabbed;
             }
             else if (Utils.IsMicaSupported)
             {
-                WindowBackdropType = Wpf.Ui.Appearance.BackgroundType.Mica;
+                WindowBackdropType = BackgroundType.Mica;
             }
             else if (Utils.IsAcrylicSupported)
             {
@@ -53,11 +56,48 @@ namespace AudioShare
                 AllowsTransparency = true;
                 DragHelper.Visibility = Visibility.Visible;
                 DragHelper.PreviewMouseLeftButtonDown += DragWindow;
-                WindowBackdropType = Wpf.Ui.Appearance.BackgroundType.Acrylic;
+                WindowBackdropType = BackgroundType.Acrylic;
+                Activated += WindowActivated;
+                Deactivated += WindowDeactivated;
             }
             else
             {
-                WindowBackdropType = Wpf.Ui.Appearance.BackgroundType.Auto;
+                WindowBackdropType = BackgroundType.Auto;
+            }
+            ThemeListener.ThemeChanged += ApplyTheme;
+            ApplyTheme(ThemeListener.IsDarkMode);
+        }
+
+        private void WindowActivated(object sender, EventArgs e)
+        {
+            WinBackground.Background = ThemeListener.IsDarkMode ? _blackBackgroundA : _whiteBackgroundA;
+        }
+
+        private void WindowDeactivated(object sender, EventArgs e)
+        {
+            WinBackground.Background = ThemeListener.IsDarkMode ? _blackBackground : _whiteBackground;
+        }
+
+        private readonly Brush _blackBackgroundA = new SolidColorBrush(Color.FromArgb(0xA0, 0x1F, 0x1F, 0x1F));
+        private readonly Brush _whiteBackgroundA = new SolidColorBrush(Color.FromArgb(0xA0, 0xFF, 0xFF, 0xFF));
+        private readonly Brush _blackBackground = new SolidColorBrush(Color.FromRgb(0x1F, 0x1F, 0x1F));
+        private readonly Brush _whiteBackground = new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0xFF));
+        private void ApplyTheme(bool isDark)
+        {
+            Theme.Apply(
+              isDark ? ThemeType.Dark : ThemeType.Light,
+              WindowBackdropType,
+              true,
+              false
+            );
+            if (WindowBackdropType == BackgroundType.Acrylic)
+            {
+                if (IsActive) WindowActivated(null, null);
+                else WindowDeactivated(null, null);
+            }
+            else
+            {
+                WinBackground.Background = Brushes.Transparent;
             }
         }
 
@@ -154,15 +194,14 @@ namespace AudioShare
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            Wpf.Ui.Appearance.Watcher.Watch(
-                this,
-                Wpf.Ui.Appearance.BackgroundType.Mica,
-                true,
-                true
-            );
+#if DEBUG
+#else
             WindowState = WindowState.Minimized;
+#endif
             _model.RefreshAudios();
             await _model.RefreshSpeakers();
+#if DEBUG
+#else
             List<Speaker> speakers = new List<Speaker>(_model.Speakers);
             foreach (var speaker in speakers)
             {
@@ -187,10 +226,12 @@ namespace AudioShare
             {
                 _model.IsUSB = false;
             }
+#endif
         }
 
         private void Exit(object sender, RoutedEventArgs e)
         {
+            notifyIcon.Dispose();
             _model.Stop();
             AudioManager.SetDevice(null, 0);
             _model.ResetSpeakerSetting();

@@ -33,6 +33,7 @@
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
     <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="PicaPico.ThemeListener" Version="1.0.1" />
     <PackageReference Include="securifybv.ShellLink" Version="0.1.0" />
     <PackageReference Include="sharpadbclient" Version="2.3.23" />
     <PackageReference Include="WPF-UI" Version="2.1.0" />
