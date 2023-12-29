@@ -138,11 +138,13 @@
                                             ItemsSource="{Binding Channels}" IsEnabled="{Binding ChannelEnabled}" Padding="6 6 0 6"
                                             SelectedValue="{Binding ChannelSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                             DisplayMemberPath="Value"/>
-                                                <Button Grid.Column="2" Height="30" Width="30" Content="X"
-                                        Margin="10 0 0 0" Padding="0" ToolTip="{DynamicResource remove}"
-                                           
-                                        Command="{Binding RemoveCommand}"
-                                        Visibility="{Binding RemoveVisible, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
+                                                <Button Grid.Column="2" Height="30" Width="30" Content="&#x2716;" FontWeight="Thin"
+                                                        Margin="10 0 0 0" Padding="0" FontSize="11"
+                                                        ToolTip="{DynamicResource remove}"
+                                                        HorizontalContentAlignment="Center"
+                                                        VerticalContentAlignment="Center"
+                                                        Command="{Binding RemoveCommand}"
+                                                        Visibility="{Binding RemoveVisible, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}"/>
                                             </Grid>
                                             <Grid Visibility="{Binding UnConnected, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
                                                 <ui:Button Appearance="Info"  Height="30" Width="80" Margin="10 0 0 0"

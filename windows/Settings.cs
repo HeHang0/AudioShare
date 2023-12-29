@@ -40,8 +40,8 @@ namespace AudioShare
             }
             catch (Exception)
             {
-                _settings = new Settings();
             }
+            if (_settings == null) _settings = new Settings();
         }
 
         private Settings() { }

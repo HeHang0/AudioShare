@@ -287,8 +287,9 @@ namespace AudioShare
                     }
                     else
                     {
+                        var manufacturer = await Utils.RunAdbShellCommandAsync(_adbClient, "getprop ro.product.manufacturer", item);
                         var savedSpeaker = _settings.AdbDevices.FirstOrDefault(m => m.Id == item.Serial);
-                        var speaker = new Speaker(_dispatcher, item.Serial, $"{item.Name} {item.Model}", savedSpeaker?.Channel ?? AudioChannel.None);
+                        var speaker = new Speaker(_dispatcher, item.Serial, $"{manufacturer.Trim()} {item.Model}", savedSpeaker?.Channel ?? AudioChannel.None);
                         speaker.Remove += OnRemoveSpeaker;
                         speaker.ConnectStatusChanged += OnConnectStatusChanged;
                         Speakers.Add(speaker);

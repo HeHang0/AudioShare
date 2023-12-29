@@ -101,18 +101,12 @@ namespace AudioShare
         {
         }
 
-        private void SetConnectStatus(ConnectStatus connectStatus)
+        private void SetConnectStatus(ConnectStatus connectStatus, bool toast = false)
         {
             if (_connectStatus == connectStatus) return;
             _dispatcher.InvokeAsync(() =>
             {
-                if (connectStatus == ConnectStatus.Connected && _connectStatus != connectStatus)
-                {
-                    new ToastContentBuilder()
-                        .AddText($"{Display} {Languages.Language.GetLanguageText("connected")}")
-                        .Show();
-                }
-                else if (connectStatus == ConnectStatus.UnConnected && _connectStatus != connectStatus)
+                if (toast && connectStatus == ConnectStatus.UnConnected && _connectStatus != connectStatus)
                 {
                     var builder = new ToastContentBuilder()
                         .AddText($"{Display} {Languages.Language.GetLanguageText("disconnected")}");
@@ -259,7 +253,7 @@ namespace AudioShare
             }
             if (!(await WriteTcp(e.Buffer, e.BytesRecorded, true)))
             {
-                await DisConnect();
+                await DisConnect(true);
             }
             lock (writeLock)
             {
@@ -342,10 +336,10 @@ namespace AudioShare
             return false;
         }
 
-        private async Task DisConnect()
+        private async Task DisConnect(bool toast=false)
         {
             if (_connectStatus == ConnectStatus.UnConnected) return;
-            SetConnectStatus(ConnectStatus.UnConnected);
+            SetConnectStatus(ConnectStatus.UnConnected, toast);
             Logger.Info("disconnect start");
             _remoteIP = string.Empty;
             _remotePort = -1;
