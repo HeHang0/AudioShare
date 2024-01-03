@@ -36,14 +36,18 @@ namespace AudioShare
             {
                 _capture.DataAvailable -= SendAudioData;
             }
-            _capture?.StopRecording();
-            _device?.Dispose();
+            _capture?.Dispose();
             Stoped?.Invoke(null, null);
             if (_device != null)
             {
                 _device.AudioEndpointVolume.OnVolumeNotification -= OnVolumeChange;
             }
+            if(device == null && sampleRate == 0)
+            {
+                _device?.Dispose();
+            }
             _device = device;
+            OnVolumeNotification?.Invoke(null, (int)((_device?.AudioEndpointVolume.MasterVolumeLevelScalar ?? 0) * 100));
             _sampleRate = sampleRate;
             if (_device == null)
             {

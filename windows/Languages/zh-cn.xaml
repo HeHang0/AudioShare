@@ -21,4 +21,8 @@
     <s:String x:Key="or">或</s:String>
     <s:String x:Key="remove">移除</s:String>
     <s:String x:Key="add">添加</s:String>
+    <s:String x:Key="ipParseError">IP地址解析错误</s:String>
+    <s:String x:Key="dataCompression">数据压缩</s:String>
+    <s:String x:Key="windowAcrylic">窗口透明</s:String>
+    <s:String x:Key="effectiveAfterRestart">重启后生效</s:String>
 </ResourceDictionary>

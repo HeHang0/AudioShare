@@ -1,18 +1,29 @@
 package com.picapico.audioshare;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
 import android.os.Binder;
+import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 
 import com.phicomm.speaker.player.light.PlayerVisualizer;
 
@@ -28,22 +39,32 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class TcpService extends Service {
     private static final String TAG = "AudioShareService";
     private static final String HEAD = "picapico-audio-share";
+    public  static final String CHANNEL_ID = "com.picapico.audio_share";
+    public static int NOTIFICATION_ID = 1;
     private final IBinder binder = new TcpBinder();
     private MessageListener mListener;
     private LocalServerSocket localServerSocket = null;
     private ServerSocket serverSocket = null;
     private AudioManager mAudioManager = null;
+    private AudioTrack mAudioTrack = null;
+    private OutputStream mSocketOutputStream = null;
     private int maxAudioVolume = 15;
 
     private boolean isWriting = false;
+    private WakeLockManager mWakeLockManager;
+    private final ExecutorService mExecutorService = Executors.newSingleThreadExecutor();
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
 
     @Override
     public void onCreate() {
         super.onCreate();
+        mWakeLockManager = new WakeLockManager(this);
         Log.i(TAG, "Service on created");
         new Thread(this::startLocalServer).start();
         new Thread(this::startServer).start();
@@ -57,8 +78,16 @@ public class TcpService extends Service {
     }
 
     @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        Log.i(TAG, "Service on task removed");
+    }
+
+    @Override
     public void onDestroy() {
         super.onDestroy();
+        stopForeground(true);
+        stopAudio();
         Log.i(TAG, "Service on destroy");
         try {
             if(localServerSocket != null){
@@ -85,7 +114,7 @@ public class TcpService extends Service {
                 (bytesRead = stream.read(buffer, offset, bufferLength - offset)) != -1){
             offset += bytesRead;
         }
-        if(new String(buffer).equals(HEAD)){
+        if(new String(buffer).equalsIgnoreCase(HEAD)){
             while ((bytesRead = stream.read(buffer, 0, 1)) != -1){
                 if(bytesRead >= 1) return buffer[0];
             }
@@ -111,31 +140,42 @@ public class TcpService extends Service {
         if(command == 2){
             try {
                 int volume = readInt(stream);
-                if(mAudioManager != null){
-                    volume = maxAudioVolume * volume / 100;
-                    setVolume(volume);
-                    mAudioManager.setStreamVolume(
-                            AudioManager.STREAM_MUSIC,
-                            volume,
-                            AudioManager.FLAG_SHOW_UI);
-                }
+                volume = maxAudioVolume * volume / 100;
+                setVolume(volume);
             } catch (IOException e) {
                 Log.e(TAG, "read volume error: " + e);
             }
         }else if(command == 3) {
             PlayerVisualizer.updateTimeMillis();
+        }else if(command == 4) {
+            if(getPlaying() && getPlayerCloser() != null){
+                try {
+                    getPlayerCloser().close();
+                } catch (IOException ignored) {
+                }
+                setPlayerCloser(null);
+                for (int i = 0; i < 10; i++) {
+                    if(!getPlaying()) break;
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+            }
         }
     }
 
     private void setVolume(int volume) {
-        try {
-            Log.i(TAG, "set music volume " + volume);
-            mAudioManager.setStreamVolume(
-                    AudioManager.STREAM_MUSIC,
-                    volume,
-                    AudioManager.FLAG_SHOW_UI);
-        } catch (Exception ignored){
-        }
+        mHandler.post(() -> {
+            try {
+                Log.i(TAG, "set music volume " + volume);
+                mAudioManager.setStreamVolume(
+                        AudioManager.STREAM_MUSIC,
+                        volume,
+                        AudioManager.FLAG_SHOW_UI);
+            } catch (Exception ignored){
+            }
+        });
     }
 
     private void processSocketClient(Closeable socket) throws IOException {
@@ -158,7 +198,7 @@ public class TcpService extends Service {
             int sampleRate = readInt(stream);
             int channel = readInt(stream);
             int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
-            int bufferSizeInBytes = getMinBufferSize(sampleRate, channel, audioFormat);
+            int bufferSizeInBytes = AudioTrack.getMinBufferSize(sampleRate, channel, audioFormat);
             if(isLocal){
                 ((LocalSocket)socket).setReceiveBufferSize(bufferSizeInBytes);
             }else {
@@ -252,9 +292,18 @@ public class TcpService extends Service {
     }
 
     private boolean isPlaying = false;
+    private Closeable playerCloser = null;
 
     private synchronized void setPlaying(boolean playing) {
         isPlaying = playing;
+    }
+
+    private synchronized void setPlayerCloser(Closeable closer) {
+        playerCloser = closer;
+    }
+
+    private synchronized Closeable getPlayerCloser() {
+        return playerCloser;
     }
 
     public synchronized boolean getPlaying() {
@@ -280,47 +329,54 @@ public class TcpService extends Service {
         maxAudioVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
     }
 
-    private int getMinBufferSize(int sampleRateInHz, int channelConfig, int audioFormat){
-        int size = 40960;
-        switch (sampleRateInHz){
-            case 192000: size = 30752; break;
-            case 176400: size = 28256; break;
-            case 96000: size = 15392; break;
-            case 48000: size = 7696; break;
-            case 44100: size = 7088; break;
-        }
-        if(channelConfig == AudioFormat.CHANNEL_OUT_MONO) size /= 2;
-        return Math.min(AudioTrack.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat), size);
-    }
-
-    private void playAudio(int sampleRateInHz, int channelConfig, int audioFormat, int bufferSizeInBytes, Closeable closer, InputStream inputStream, OutputStream outputStream){
+    private void playAudio(int sampleRateInHz, int channelConfig, int audioEncoding, int bufferSizeInBytes, Closeable closer, InputStream inputStream, OutputStream outputStream){
         if(getPlaying()) return;
         setPlaying(true);
+        setPlayerCloser(closer);
         if(mListener != null){
             mListener.onMessage();
         }
-        AudioTrack audioTrack = null;
         PlayerVisualizer playerVisualizer = null;
         try {
-            audioTrack = new AudioTrack(
-                    AudioManager.STREAM_MUSIC,
-                    sampleRateInHz,
-                    channelConfig,
+            initNotification();
+            mWakeLockManager.acquireWakeLock();
+            AudioFormat audioFormat = new AudioFormat.Builder()
+                    .setChannelMask(channelConfig)
+                    .setEncoding(audioEncoding)
+                    .setSampleRate(sampleRateInHz)
+                    .build();
+            AudioAttributes.Builder audioAttributes = new AudioAttributes.Builder()
+                    .setLegacyStreamType(AudioManager.STREAM_MUSIC)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                audioAttributes.setFlags(AudioAttributes.FLAG_LOW_LATENCY);
+            }
+            mAudioTrack = new AudioTrack(
+                    audioAttributes.build(),
                     audioFormat,
-                    bufferSizeInBytes, AudioTrack.MODE_STREAM);
+                    bufferSizeInBytes,
+                    AudioTrack.MODE_STREAM,
+                    AudioManager.AUDIO_SESSION_ID_GENERATE);
             setVolume(0);
             byte[] buffer = new byte[bufferSizeInBytes];
             int dataLength;
-            audioTrack.play();
-            playerVisualizer = new PlayerVisualizer(audioTrack.getAudioSessionId());
+            mAudioTrack.play();
+            playerVisualizer = new PlayerVisualizer(mAudioTrack.getAudioSessionId());
             Log.i(TAG, "play audio ready to read");
             outputStream.write(new byte[1]);
             outputStream.flush();
+            mSocketOutputStream = outputStream;
             DataInputStream stream = new DataInputStream(inputStream);
+            setWriting(false);
             while (true) {
                 try {
                     stream.readFully(buffer, 0, 4);
                     dataLength = parseInt(buffer);
+                    if(dataLength == 0) {
+                        Log.i(TAG, "play audio heartbeat");
+                        continue;
+                    }
                     if(dataLength > buffer.length) {
                         buffer = new byte[dataLength];
                     }
@@ -328,15 +384,17 @@ public class TcpService extends Service {
                 } catch (Exception e){
                     break;
                 }
-                if(getWriting()) continue;
-                setWriting(true);
-                AudioTrack finalAudioTrack = audioTrack;
+                if(getWriting()) {
+                    Log.w(TAG, "write audio busy");
+                    continue;
+                }
                 byte[] finalBuffer = buffer;
                 int finalDataLength = dataLength;
-                new Thread(() -> {
-                    finalAudioTrack.write(finalBuffer, 0, finalDataLength);
-                    setWriting(false);
-                }).start();
+                setWriting(true);
+                mExecutorService.execute(() -> {
+                    mAudioTrack.write(finalBuffer, 0, finalDataLength);
+                    mHandler.post(() -> setWriting(false));
+                });
             }
         } catch (Exception e) {
             Log.e(TAG, "play audio error: " + e);
@@ -351,32 +409,82 @@ public class TcpService extends Service {
                 Log.e(TAG, "stop stream error: " + e);
             }
             try {
-                outputStream.close();
-            } catch (Exception e) {
-                Log.e(TAG, "stop output stream error: " + e);
-            }
-            try {
                 closer.close();
             } catch (Exception e) {
                 Log.e(TAG, "close audio socket error: " + e);
             }
-            try {
-                if(audioTrack != null) {
-                    audioTrack.pause();
-                    audioTrack.stop();
-                    audioTrack.flush();
-                    audioTrack.release();
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "stop audio error: " + e);
-            }
         }
+        stopAudio();
+        stopSocketOutputStream();
+        stopForeground(true);
+        mWakeLockManager.releaseWakeLock();
         setPlaying(false);
         if(mListener != null){
             mListener.onMessage();
         }
+        Log.i(TAG, "play audio ended");
     }
 
+    private void stopAudio(){
+        try {
+            if(mAudioTrack != null) {
+                mAudioTrack.pause();
+                mAudioTrack.stop();
+                mAudioTrack.flush();
+                mAudioTrack.release();
+                mAudioTrack = null;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "stop audio error: " + e);
+        }
+    }
+
+    private void stopSocketOutputStream(){
+        try {
+            if(mSocketOutputStream != null) {
+                mSocketOutputStream.flush();
+                mSocketOutputStream.close();
+                mSocketOutputStream = null;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "stop output stream error: " + e);
+        }
+    }
+    private void createNotificationChannel(){
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            NotificationChannel serviceChannel = new NotificationChannel(
+                    CHANNEL_ID,
+                    getResources().getString(R.string.app_name),
+                    NotificationManager.IMPORTANCE_LOW
+            );
+            serviceChannel.enableLights(false);
+            serviceChannel.enableVibration(false);
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if(manager != null) manager.createNotificationChannel(serviceChannel);
+        }
+    }
+    private void initNotification(){
+        createNotificationChannel();
+        int flag = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            flag = PendingIntent.FLAG_IMMUTABLE;
+        }
+        Intent infoIntent = new Intent(this, BootReceiver.class);
+        PendingIntent pendingInfo = PendingIntent.getActivity(this, 0, infoIntent, flag);
+        Notification mNotification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentIntent(pendingInfo)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setContentTitle(getResources().getString(R.string.app_name))
+                .setContentText(getResources().getString(R.string.app_name))
+                .build();
+        if(ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.WAKE_LOCK) ==
+                PackageManager.PERMISSION_GRANTED) {
+            startForeground(NOTIFICATION_ID, mNotification);
+        }
+    }
     private synchronized void setWriting(boolean writing) {
         isWriting = writing;
     }
@@ -390,7 +498,17 @@ public class TcpService extends Service {
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                if (getPlaying()) return;
+                if (getPlaying()) {
+                    try {
+                        if(mSocketOutputStream != null) {
+                            mSocketOutputStream.write(new byte[1]);
+                            Log.i(TAG, "send heartbeat");
+                        }
+                    } catch (IOException e) {
+                        Log.e(TAG, "send heartbeat err: " + e);
+                    }
+                    return;
+                }
                 try (DatagramSocket socket = new DatagramSocket(0)) {
                     socket.setBroadcast(true);
                     InetAddress broadcastAddress = InetAddress.getByName(NetworkUtils.BROADCAST_ADDRESS);

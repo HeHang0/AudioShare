@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -41,7 +42,11 @@ namespace AudioShare
                 using (TcpClient tcpClient = new TcpClient())
                 {
                     tcpClient.ReceiveTimeout = timeout;
-                    await tcpClient.ConnectAsync(host, port);
+                    Task connectTask = tcpClient.ConnectAsync(host, port);
+                    if (await Task.WhenAny(connectTask, Task.Delay(TimeSpan.FromMilliseconds(timeout))) != connectTask)
+                    {
+                        return false;
+                    }
                     return true;
                 }
             }
@@ -53,11 +58,23 @@ namespace AudioShare
 
         public static async Task<int> GetFreePort(int port = 8088)
         {
-            for (; port < 65535; port++)
+            try
             {
-                if (!await PortIsOpen(port, 50)) break;
+
+                TcpListener listener = new TcpListener(IPAddress.Loopback, 0);
+                listener.Start();
+                port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                listener.Stop();
+                return port;
             }
-            return port;
+            catch (Exception)
+            {
+                for (; port < 65535; port++)
+                {
+                    if (!await PortIsOpen(port, 50)) break;
+                }
+                return port;
+            }
         }
 
         public static async Task<int> RunCommandAsync(string fileName, string arguments)

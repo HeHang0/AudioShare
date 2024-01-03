@@ -21,4 +21,8 @@
     <s:String x:Key="or">or</s:String>
     <s:String x:Key="remove">Remove</s:String>
     <s:String x:Key="add">add</s:String>
+    <s:String x:Key="ipParseError">IP address resolution error</s:String>
+    <s:String x:Key="dataCompression">Data Compression</s:String>
+    <s:String x:Key="windowAcrylic">Transparent</s:String>
+    <s:String x:Key="effectiveAfterRestart">Effective after restart</s:String>
 </ResourceDictionary>

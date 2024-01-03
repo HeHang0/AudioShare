@@ -22,6 +22,10 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.util.List;
+
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "AudioShare";
     private TcpService tcpService = null;
@@ -69,20 +73,20 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // 解绑服务
         if (isBound) {
             unbindService(connection);
             isBound = false;
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private void setVersionName(){
         PackageManager packageManager = getPackageManager();
         String packageName = getPackageName();
         try {
             PackageInfo packageInfo = packageManager.getPackageInfo(packageName, 0);
             TextView versionName = findViewById(R.id.versionName);
-            versionName.setText(packageInfo.versionName);
+            versionName.setText(packageInfo.versionName+"\n\n");
         } catch (PackageManager.NameNotFoundException e) {
             Log.e(TAG, "set version error: " + e);
         }
@@ -102,8 +106,21 @@ public class MainActivity extends AppCompatActivity {
         if(tcpService == null) return;
         runOnUiThread(() -> {
             int port = tcpService.getListenPort();
-            String ip = NetworkUtils.getIpAddress(this);
-            ipAddress.setText(ip + ":" + port);
+            StringBuilder sb = new StringBuilder();
+            List<InetAddress> ips = NetworkUtils.getAllInetAddress();
+            if(ips.isEmpty()){
+                String ip = NetworkUtils.getIpAddress(this);
+                sb.append(ip).append(":").append(port).append("\n");
+            }else {
+                for (InetAddress ip: ips) {
+                    String address = ip.getHostAddress();
+                    if(ip instanceof Inet6Address) {
+                        address = "[" + address + "]";
+                    }
+                    sb.append(address).append(":").append(port).append("\n");
+                }
+            }
+            ipAddress.setText(sb.toString().trim());
         });
     }
 

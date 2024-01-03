@@ -27,6 +27,7 @@ namespace AudioShare
         private readonly Settings _settings = Settings.Load();
 
         private readonly Dispatcher _dispatcher;
+        private readonly DispatcherTimer _heartBeatTimer;
         private UdpClient _udpListener;
         public Model()
         {
@@ -34,6 +35,22 @@ namespace AudioShare
             AudioManager.OnVolumeNotification += OnVolumeChanged;
             ToastNotificationManagerCompat.OnActivated += OnToastActivated;
             ConnectUdp();
+            _heartBeatTimer = new DispatcherTimer();
+            _heartBeatTimer.Tick += SendHeartbeat;
+            _heartBeatTimer.Interval = TimeSpan.FromSeconds(5);
+            _heartBeatTimer.IsEnabled = true;
+            _heartBeatTimer.Start();
+        }
+
+        private void SendHeartbeat(object sender, EventArgs e)
+        {
+            foreach (var item in Speakers)
+            {
+                if(item.Connected)
+                {
+                    item.SendHeartbeat();
+                }
+            }
         }
 
         private void OnToastActivated(ToastNotificationActivatedEventArgsCompat e)
@@ -87,12 +104,13 @@ namespace AudioShare
         public ObservableCollection<Speaker> Speakers { get; private set; } = new ObservableCollection<Speaker>();
         public ObservableCollection<SampleRatePair> SampleRates => new ObservableCollection<SampleRatePair>()
         {
-            //192000, 176400, 96000, 48000, 44100
             new SampleRatePair(192000, "192kHz"),
             new SampleRatePair(176400, "176.4kHz"),
             new SampleRatePair(96000, "96kHz"),
             new SampleRatePair(48000, "48kHz"),
             new SampleRatePair(44100, "44.1kHz"),
+            new SampleRatePair(16000, "16kHz"),
+            new SampleRatePair(8000, "8kHz"),
         };
         public ImageSource Icon => Utils.AppIcon;
         public string Title => Languages.Language.GetLanguageText("title") + " " + Utils.VersionName;
@@ -110,6 +128,7 @@ namespace AudioShare
         }
         private int _connectedCount = 0;
         public bool Connected => _connectedCount > 0;
+        public bool AudioEnabled => _connectedCount <= 0 && _connectingCount <= 0;
         public bool UnConnected => _connectedCount <= 0;
         public int ConnectedCount
         {
@@ -120,6 +139,17 @@ namespace AudioShare
                 OnPropertyChanged(nameof(ConnectedCount));
                 OnPropertyChanged(nameof(Connected));
                 OnPropertyChanged(nameof(UnConnected));
+                OnPropertyChanged(nameof(AudioEnabled));
+            }
+        }
+        private int _connectingCount = 0;
+        public int ConnectingCount
+        {
+            get => _connectingCount;
+            set
+            {
+                _connectingCount = value;
+                OnPropertyChanged(nameof(AudioEnabled));
             }
         }
         public NamePair AudioSelected
@@ -160,6 +190,7 @@ namespace AudioShare
             get => _settings.Volume;
             set
             {
+                if(_settings.Volume == value) return;
                 _settings.Volume = value;
                 OnPropertyChanged(nameof(Volume));
                 foreach (var speaker in Speakers)
@@ -240,6 +271,19 @@ namespace AudioShare
         }
         public bool VolumeCustom => !_settings.VolumeFollowSystem;
 
+        public bool AcrylicVisible => Utils.IsAcrylicSupported;
+
+        public bool Acrylic
+        {
+            get => _settings.Acrylic;
+            set
+            {
+                _settings.Acrylic = value;
+                OnPropertyChanged(nameof(Acrylic));
+                _settings.Save();
+            }
+        }
+
         public RelayCommand RefreshAudiosCommand => new RelayCommand(RefreshAudios, CanRefreshAudios);
 
         public RelayCommand RefreshSpeakersCommand => new RelayCommand(RefreshSpeakers, CanRefreshSpeakers);
@@ -277,6 +321,7 @@ namespace AudioShare
                 await Utils.RunCommandAsync(adbPath, "devices");
                 var devices = _adbClient.GetDevices();
                 Speakers.Clear();
+                devices.Sort((a, b) => a.Name.CompareTo(b.Name));
                 foreach (var item in devices)
                 {
                     if (item.State != SharpAdbClient.DeviceState.Online) continue;
@@ -287,9 +332,14 @@ namespace AudioShare
                     }
                     else
                     {
-                        var manufacturer = await Utils.RunAdbShellCommandAsync(_adbClient, "getprop ro.product.manufacturer", item);
+                        var marketingName = await Utils.RunAdbShellCommandAsync(_adbClient, "getprop ro.config.marketing_name", item);
+                        if (string.IsNullOrWhiteSpace(marketingName))
+                        {
+                            var manufacturer = await Utils.RunAdbShellCommandAsync(_adbClient, "getprop ro.product.manufacturer", item);
+                            marketingName = $"{manufacturer.Trim()} {item.Model}";
+                        }
                         var savedSpeaker = _settings.AdbDevices.FirstOrDefault(m => m.Id == item.Serial);
-                        var speaker = new Speaker(_dispatcher, item.Serial, $"{manufacturer.Trim()} {item.Model}", savedSpeaker?.Channel ?? AudioChannel.None);
+                        var speaker = new Speaker(_dispatcher, item.Serial, marketingName.Trim(), savedSpeaker?.Channel ?? AudioChannel.None);
                         speaker.Remove += OnRemoveSpeaker;
                         speaker.ConnectStatusChanged += OnConnectStatusChanged;
                         Speakers.Add(speaker);
@@ -473,7 +523,7 @@ namespace AudioShare
             {
                 if (sender != null && sender is Speaker)
                 {
-                    ((Speaker)sender).SetVolume(Volume);
+                    ((Speaker)sender)?.SetVolume(Volume);
                 }
                 List<Speaker> allConnected = Speakers.Where(speaker => speaker.Connected).ToList();
                 foreach (var speaker in allConnected)
@@ -487,11 +537,8 @@ namespace AudioShare
             {
                 ConnectedCount = Speakers.Where(m => m.Connected).Count();
             }
+            ConnectingCount = Speakers.Where(m => m.Connecting).Count();
             Logger.Info("connect status changed end");
-            //if(Speakers.Where(m => m.Connected || m.Connecting).Count() == 0)
-            //{
-            //    AudioManager.StopCapture();
-            //}
         }
 
         private void OnPropertyChanged(string propertyName)

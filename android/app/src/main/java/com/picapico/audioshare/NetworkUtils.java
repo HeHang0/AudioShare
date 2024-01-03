@@ -22,6 +22,7 @@ import java.util.List;
 public class NetworkUtils {
     private static final String TAG = "AudioShareNetworkUtils";
     public static final String BROADCAST_ADDRESS = "255.255.255.255";
+    public static final String BROADCAST_ADDRESS_V6 = "FF02::1";
     public static boolean checkPortBusy(int port){
         try {
             new ServerSocket(port).close();
@@ -117,9 +118,12 @@ public class NetworkUtils {
                     boolean isLoopback = networkInterface.isLoopback();
                     boolean isUp = networkInterface.isUp();
                     byte[] hardwareAddress = networkInterface.getHardwareAddress();
-                    if(isLoopback || !isUp || hardwareAddress == null) continue;
+                    String name = networkInterface.getName();
+                    if(isLoopback || !isUp || hardwareAddress == null || name.startsWith("dummy")) continue;
                     while (addresses.hasMoreElements()) {
-                        localAddresses.add(addresses.nextElement());
+                        InetAddress element = addresses.nextElement();
+                        if(element.isLinkLocalAddress()) continue;
+                        localAddresses.add(element);
                     }
                 } catch (SocketException e) {
                     Log.e(TAG, "get all inet address error: " + e);

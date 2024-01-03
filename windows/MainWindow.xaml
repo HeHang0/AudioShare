@@ -29,6 +29,11 @@
                 <StackPanel Orientation="Horizontal">
                     <Label Content="{DynamicResource startup}" Margin="0 0 5 0" HorizontalAlignment="Left" VerticalAlignment="Bottom" Padding="0"/>
                     <ui:ToggleSwitch IsChecked="{Binding IsStartup}" Width="40" Height="20" VerticalAlignment="Bottom"/>
+                    <StackPanel Orientation="Horizontal"
+                                Visibility="{Binding AcrylicVisible, Converter={StaticResource BooleanToVisibility}, Mode=OneWay}">
+                        <Label Content="{DynamicResource windowAcrylic}" Margin="10 0 5 0" HorizontalAlignment="Left" VerticalAlignment="Bottom" Padding="0"/>
+                        <ui:ToggleSwitch IsChecked="{Binding Acrylic}" ToolTip="{DynamicResource effectiveAfterRestart}" Width="40" Height="20" VerticalAlignment="Bottom"/>
+                    </StackPanel>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Border Width="10" Height="10" Margin="0 0 5 3" Background="Green" CornerRadius="50" VerticalAlignment="Bottom"
@@ -51,12 +56,12 @@
             <StackPanel Height="30" Width="400" Orientation="Horizontal">
                 <ComboBox Height="30" Width="220" ItemsSource="{Binding AudioDevices}" VerticalContentAlignment="Center"
                       SelectedValue="{Binding AudioSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                      DisplayMemberPath="Value" Padding="10 6 10 6"/>
+                      DisplayMemberPath="Value" Padding="10 6 10 6" IsEnabled="{Binding AudioEnabled}"/>
                 <ComboBox Height="30" Width="80" Margin="10 0 0 0" Padding="6 6 0 6" ItemsSource="{Binding SampleRates}"
-                          VerticalAlignment="Center" DisplayMemberPath="Value"
+                          VerticalAlignment="Center" DisplayMemberPath="Value" IsEnabled="{Binding AudioEnabled}"
                           SelectedValue="{Binding SampleRate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                 <ui:Button Appearance="Info" Height="30" Width="80" Content="{DynamicResource refresh}"
-                           Margin="10 0 0 0" Command="{Binding RefreshAudiosCommand}"/>
+                           Margin="10 0 0 0" Command="{Binding RefreshAudiosCommand}" IsEnabled="{Binding AudioEnabled}"/>
             </StackPanel>
             <Grid Width="400" Margin="0 5 0 0">
                 <StackPanel>

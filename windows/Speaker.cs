@@ -7,8 +7,10 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -23,7 +25,8 @@ namespace AudioShare
             None = 0,
             AudioData = 1,
             Volume = 2,
-            SyncTime = 3
+            SyncTime = 3,
+            Stop = 4
         }
         public event PropertyChangedEventHandler PropertyChanged;
         public event EventHandler<Speaker> Remove;
@@ -179,16 +182,24 @@ namespace AudioShare
                     var device = adbClient.GetDevice(_id);
                     adbClient.RemoveRemoteForward(device, REMOTE_SOCKET);
                     adbClient.CreateForward(device, "tcp:" + port, REMOTE_SOCKET, true);
-                    await tcpClient.ConnectAsync("127.0.0.1", port);
                     _remoteIP = "127.0.0.1";
                     _remotePort = port;
                 }
                 else
                 {
-                    var addressArr = _id.Split(':');
-                    string ip = addressArr.FirstOrDefault()?.Trim() ?? string.Empty;
-                    if (addressArr.Length < 2 ||
-                        !int.TryParse(addressArr.LastOrDefault()?.Trim() ?? string.Empty, out int port))
+                    string pattern = @"^[\[]?(?<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|([0-9A-Fa-f]{1,4}:){1,7}([0-9A-Fa-f]{1,4}|:))[\]]?(:(?<port>\d+))?$";
+                    var match = Regex.Match(_id, pattern);
+                    if (!match.Success)
+                    {
+                        MessageBox.Show(Application.Current.MainWindow,
+                            Languages.Language.GetLanguageText("ipParseError"),
+                            Application.Current.MainWindow.Title);
+                        throw new Exception("address error");
+                    }
+                    var groupIP = match.Groups["ip"];
+                    var groupPort = match.Groups["port"];
+                    string ip = groupIP.Value;
+                    if(!int.TryParse(groupPort?.Value ?? string.Empty, out int port))
                     {
                         port = 80;
                     }
@@ -196,10 +207,13 @@ namespace AudioShare
                     {
                         throw new Exception("device not ready");
                     }
-                    await tcpClient.ConnectAsync(ip, port);
                     _remoteIP = ip;
                     _remotePort = port;
                 }
+                await RequestTcp(Command.Stop, force: true);
+                IPAddress ipAddress = IPAddress.Parse(_remoteIP);
+                await tcpClient.ConnectAsync(ipAddress, _remotePort);
+
                 if (tcpClient.Connected)
                 {
                     Logger.Info("connect send head");
@@ -227,14 +241,31 @@ namespace AudioShare
                         }
                         AudioManager.Stoped += OnAudioStoped;
                     });
+                    ReadAsync(tcpClient.GetStream());
                 }
                 SetConnectStatus(ConnectStatus.Connected);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 await DisConnect();
+                Logger.Error("connect error: " + ex.Message);
             }
             Logger.Info("connect end");
+        }
+        private readonly byte[] _receiveBuffer = new byte[512];
+        private async void ReadAsync(NetworkStream stream)
+        {
+            try
+            {
+                if (stream.CanRead)
+                {
+                    await stream.ReadAsync(_receiveBuffer, 0, _receiveBuffer.Length);
+                    ReadAsync(stream);
+                }
+            }
+            catch (Exception)
+            {
+            }
         }
 
         private void OnAudioStoped(object sender, EventArgs e)
@@ -300,7 +331,9 @@ namespace AudioShare
             if (device == null) return false;
 
             if (string.IsNullOrWhiteSpace(device.Serial)) return false;
-
+            string adbPath = Utils.FindAdbPath();
+            if (string.IsNullOrWhiteSpace(adbPath)) return false;
+            await Utils.RunCommandAsync(adbPath, "start-server");
             string result = await Utils.RunAdbShellCommandAsync(adbClient, "dumpsys package com.picapico.audioshare|grep versionName", device);
             if (result.Contains(Utils.VersionName))
             {
@@ -319,10 +352,13 @@ namespace AudioShare
                 return false;
             }
 
-            await Utils.RunAdbShellCommandAsync(adbClient, "rm -f /data/local/tmp/audioshare.apk", device);
             await adbClient.PushAsync(device, apkPath, "/data/local/tmp/audioshare.apk");
-            await Utils.RunAdbShellCommandAsync(adbClient, "/system/bin/pm uninstall com.picapico.audioshare", device);
-            await Utils.RunAdbShellCommandAsync(adbClient, "/system/bin/pm install -r /data/local/tmp/audioshare.apk && rm -f /data/local/tmp/audioshare.apk", device);
+            await Utils.RunAdbShellCommandAsync(adbClient,
+                "/system/bin/pm uninstall com.picapico.audioshare;" +
+                "/system/bin/pm install -r /data/local/tmp/audioshare.apk;" +
+                "rm -f /data/local/tmp/audioshare.apk;" +
+                "dumpsys deviceidle whitelist +com.picapico.audioshare;", device);
+            Logger.Info("install apk success");
 
             result = await Utils.RunAdbShellCommandAsync(adbClient, "dumpsys package com.picapico.audioshare|grep versionName", device);
             if (result.Contains(Utils.VersionName))
@@ -406,10 +442,25 @@ namespace AudioShare
             return _connectStatus == ConnectStatus.UnConnected;
         }
 
+        private long _lastSendTime = 0;
+        private static readonly byte[] _heartBeatBytes = new byte[] { 0x00, 0x00, 0x00, 0x00 };
+        public void SendHeartbeat()
+        {
+            _dispatcher.Invoke(async () =>
+            {
+                if(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - _lastSendTime > 5)
+                {
+                    if(!await WriteTcp(_heartBeatBytes)) {
+                        _ = DisConnect();
+                    }
+                }
+            });
+        }
         private async Task<bool> WriteTcp(byte[] buffer, int length = 0, bool sendLength = false)
         {
             if (length == 0) length = buffer.Length;
             if (length == 0) return true;
+            _lastSendTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             try
             {
                 if (tcpClient != null)
@@ -435,19 +486,25 @@ namespace AudioShare
             return false;
         }
 
-        private async Task RequestTcp(Command command, byte[] data = null)
+        private async Task RequestTcp(Command command, byte[] data = null, bool force=false)
         {
-            if (command == Command.None || UnConnected || Connecting || string.IsNullOrWhiteSpace(_remoteIP) || _remotePort <= 0) return;
+            if (command == Command.None || 
+                string.IsNullOrWhiteSpace(_remoteIP) || 
+                _remotePort <= 0 || 
+                (!force && !Connected))
+            {
+                return;
+            }
             TcpClient client = new TcpClient();
             client.SendTimeout = 1000;
             try
             {
                 await client.ConnectAsync(_remoteIP, _remotePort);
-                client.GetStream().Write(TCP_HEAD, 0, TCP_HEAD.Length);
-                client.GetStream().Write(new byte[] { (byte)command }, 0, 1);
+                await client.GetStream().WriteAsync(TCP_HEAD, 0, TCP_HEAD.Length);
+                await client.GetStream().WriteAsync(new byte[] { (byte)command }, 0, 1);
                 if (data != null && data.Length > 0)
                 {
-                    client.GetStream().Write(data, 0, data.Length);
+                    await client.GetStream().WriteAsync(data, 0, data.Length);
                 }
                 await client.GetStream().FlushAsync();
                 await client.GetStream().ReadAsync(new byte[1], 0, 1);

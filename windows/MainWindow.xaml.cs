@@ -6,9 +6,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Linq;
-using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Interop;
 using System.Windows.Media;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
@@ -30,8 +29,8 @@ namespace AudioShare
         public MainWindow()
         {
             InitializeComponent();
-            InitWindowBackdropType();
             _model = new Model();
+            InitWindowBackdropType();
             InitLanguage();
             DataContext = _model;
             Loaded += MainWindow_Loaded;
@@ -50,13 +49,13 @@ namespace AudioShare
             {
                 WindowBackdropType = BackgroundType.Mica;
             }
-            else if (Utils.IsAcrylicSupported)
+            else if (Utils.IsAcrylicSupported && _model.Acrylic)
             {
                 WindowStyle = WindowStyle.None;
                 AllowsTransparency = true;
                 DragHelper.Visibility = Visibility.Visible;
-                DragHelper.PreviewMouseLeftButtonDown += DragWindow;
                 WindowBackdropType = BackgroundType.Acrylic;
+                DragHelper.PreviewMouseLeftButtonDown += DragWindow;
                 Activated += WindowActivated;
                 Deactivated += WindowDeactivated;
             }
@@ -202,18 +201,15 @@ namespace AudioShare
             await _model.RefreshSpeakers();
 #if DEBUG
 #else
-            List<Speaker> speakers = new List<Speaker>(_model.Speakers);
-            foreach (var speaker in speakers)
+            List<Task> tasks = new List<Task>();
+            foreach (var speaker in _model.Speakers)
             {
                 if (speaker.UnConnected && speaker.ChannelSelected.Key != AudioChannel.None)
                 {
-                    await speaker.Connect();
-                    if (!_model.Speakers.Contains(speaker))
-                    {
-                        speaker.Dispose();
-                    }
+                    tasks.Add(speaker.Connect());
                 }
             }
+            await Task.WhenAll(tasks);
             if (_model.Speakers.Any(m => m.Connected))
             {
                 Hide();
