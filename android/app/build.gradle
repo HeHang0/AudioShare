@@ -10,8 +10,8 @@ android {
         applicationId "com.picapico.audioshare"
         minSdk 21
         targetSdk 34
-        versionCode 160
-        versionName "1.6.0"
+        versionCode 170
+        versionName "1.7.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -39,7 +39,8 @@ android {
 }
 
 dependencies {
-
+    implementation 'androidx.media:media:1.7.0'
+    implementation 'com.koushikdutta.async:androidasync:3.1.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'

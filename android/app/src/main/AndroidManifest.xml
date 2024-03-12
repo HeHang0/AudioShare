@@ -7,9 +7,11 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-feature android:name="android.hardware.audio.low_latency" />
+    <uses-feature android:name="android.hardware.wifi.direct" />
 
     <application
         android:allowBackup="true"
@@ -36,6 +38,13 @@
             android:stopWithTask="false"
             android:foregroundServiceType="mediaPlayback"
             android:launchMode="singleInstance" />
+        <receiver android:name=".musiche.notification.NotificationReceiver" />
+        <receiver android:name="androidx.media.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"

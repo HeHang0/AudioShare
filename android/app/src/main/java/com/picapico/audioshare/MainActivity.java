@@ -31,6 +31,7 @@ public class MainActivity extends AppCompatActivity {
     private TcpService tcpService = null;
     private boolean isBound = false;
     private TextView ipAddress;
+    private String versionName;
     private LinearLayout connectedLayout;
     private LinearLayout unConnectedLayout;
     private final TcpService.MessageListener messageListener = () -> {
@@ -44,6 +45,7 @@ public class MainActivity extends AppCompatActivity {
             TcpService.TcpBinder binder = (TcpService.TcpBinder) service;
             tcpService = binder.getService();
             tcpService.setAudioManager((AudioManager)getSystemService(Context.AUDIO_SERVICE));
+            tcpService.setVersionName(versionName);
             tcpService.setMessageListener(messageListener);
             isBound = true;
             setConnectionStatus();
@@ -78,7 +80,6 @@ public class MainActivity extends AppCompatActivity {
             isBound = false;
         }
     }
-
     @SuppressLint("SetTextI18n")
     private void setVersionName(){
         PackageManager packageManager = getPackageManager();
@@ -87,6 +88,7 @@ public class MainActivity extends AppCompatActivity {
             PackageInfo packageInfo = packageManager.getPackageInfo(packageName, 0);
             TextView versionName = findViewById(R.id.versionName);
             versionName.setText(packageInfo.versionName+"\n\n");
+            this.versionName = packageInfo.versionName;
         } catch (PackageManager.NameNotFoundException e) {
             Log.e(TAG, "set version error: " + e);
         }

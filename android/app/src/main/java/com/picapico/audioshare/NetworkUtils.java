@@ -46,17 +46,22 @@ public class NetworkUtils {
     }
 
     public static String getIpAddress(Context context){
-        NetworkInfo info = ((ConnectivityManager) context
-                .getSystemService(Context.CONNECTIVITY_SERVICE)).getActiveNetworkInfo();
-        if (info != null && isNetworkAvailable(context, info)) {
-            if (info.getType() == ConnectivityManager.TYPE_ETHERNET){
-                return getLocalIp();
-            } else if (info.getType() == ConnectivityManager.TYPE_WIFI) {
-                WifiManager wifiManager = (WifiManager) context.getApplicationContext()
-                        .getSystemService(Context.WIFI_SERVICE);
-                WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-                return intIP2StringIP(wifiInfo.getIpAddress());
+        try{
+
+            NetworkInfo info = ((ConnectivityManager) context
+                    .getSystemService(Context.CONNECTIVITY_SERVICE)).getActiveNetworkInfo();
+            if (info != null && isNetworkAvailable(context, info)) {
+                if (info.getType() == ConnectivityManager.TYPE_ETHERNET){
+                    return getLocalIp();
+                } else if (info.getType() == ConnectivityManager.TYPE_WIFI) {
+                    WifiManager wifiManager = (WifiManager) context.getApplicationContext()
+                            .getSystemService(Context.WIFI_SERVICE);
+                    WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+                    return intIP2StringIP(wifiInfo.getIpAddress());
+                }
             }
+        }catch (Exception e){
+            Log.e(TAG, "get ip address error: " + e);
         }
         return "";
     }
@@ -88,8 +93,9 @@ public class NetworkUtils {
     // 获取有限网IP
     public static String getLocalIp() {
         try {
-            for (Enumeration<NetworkInterface> en = NetworkInterface
-                    .getNetworkInterfaces(); en.hasMoreElements(); ) {
+            Enumeration<NetworkInterface> en = NetworkInterface
+                .getNetworkInterfaces();
+            while (en.hasMoreElements()) {
                 NetworkInterface networkInterface = en.nextElement();
                 for (Enumeration<InetAddress> enumIpAddress = networkInterface
                         .getInetAddresses(); enumIpAddress.hasMoreElements(); ) {
@@ -115,14 +121,20 @@ public class NetworkUtils {
                 try {
                     NetworkInterface networkInterface = interfaces.nextElement();
                     Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
-                    boolean isLoopback = networkInterface.isLoopback();
-                    boolean isUp = networkInterface.isUp();
                     byte[] hardwareAddress = networkInterface.getHardwareAddress();
                     String name = networkInterface.getName();
-                    if(isLoopback || !isUp || hardwareAddress == null || name.startsWith("dummy")) continue;
+                    if((hardwareAddress == null &&
+                            !name.startsWith("eth0") &&
+                            !name.startsWith("wlan0")) || name.startsWith("dummy")) {
+                        continue;
+                    }
+                    boolean isLoopback = networkInterface.isLoopback();
+                    boolean isUp = networkInterface.isUp();
+                    if(isLoopback || !isUp) continue;
                     while (addresses.hasMoreElements()) {
                         InetAddress element = addresses.nextElement();
                         if(element.isLinkLocalAddress()) continue;
+                        Log.i(TAG, String.format("name: %s, loopback: %b, up: %b, linkLocal: %b, address: %s", name, isLoopback, isUp, element.isLinkLocalAddress(), element.toString()));
                         localAddresses.add(element);
                     }
                 } catch (SocketException e) {

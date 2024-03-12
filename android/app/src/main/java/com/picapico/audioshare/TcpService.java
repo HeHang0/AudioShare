@@ -4,7 +4,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
@@ -26,6 +26,9 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
 import com.phicomm.speaker.player.light.PlayerVisualizer;
+import com.picapico.audioshare.musiche.AudioPlayer;
+import com.picapico.audioshare.musiche.HttpServer;
+import com.picapico.audioshare.musiche.notification.NotificationService;
 
 import java.io.Closeable;
 import java.io.DataInputStream;
@@ -42,7 +45,7 @@ import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class TcpService extends Service {
+public class TcpService extends NotificationService {
     private static final String TAG = "AudioShareService";
     private static final String HEAD = "picapico-audio-share";
     public  static final String CHANNEL_ID = "com.picapico.audio_share";
@@ -60,7 +63,7 @@ public class TcpService extends Service {
     private WakeLockManager mWakeLockManager;
     private final ExecutorService mExecutorService = Executors.newSingleThreadExecutor();
     private final Handler mHandler = new Handler(Looper.getMainLooper());
-
+    private HttpServer httpServer;
     @Override
     public void onCreate() {
         super.onCreate();
@@ -68,9 +71,23 @@ public class TcpService extends Service {
         Log.i(TAG, "Service on created");
         new Thread(this::startLocalServer).start();
         new Thread(this::startServer).start();
+        httpServer = new HttpServer(8080);
         startBroadcastTimer();
-    }
+        httpServer.getAudioPlayer().setMediaMetaChangedListener(new AudioPlayer.MediaMetaChangedListener() {
+            @Override
+            public void onMediaMetaChanged(boolean playing, int position) {
+                setMetaData(playing, position);
+            }
 
+            @Override
+            public void onMediaMetaChanged(String title, String artist, String album, String artwork, boolean lover, boolean playing, int position, int duration) {
+                setMetaData(title, artist, album, artwork, lover, playing, position, duration);
+            }
+        });
+        this.setMediaSessionCallback(httpServer.getAudioPlayer().getNotificationCallback());
+        httpServer.setSharedPreferences(getSharedPreferences("config", Context.MODE_PRIVATE));
+        httpServer.setAssetManager(getAssets());
+    }
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.i(TAG, "Service on start command");
@@ -92,6 +109,7 @@ public class TcpService extends Service {
         try {
             if(localServerSocket != null){
                 localServerSocket.close();
+                localServerSocket = null;
             }
         } catch (IOException e) {
             Log.e(TAG, "close local server error: " + e);
@@ -99,10 +117,12 @@ public class TcpService extends Service {
         try {
             if(serverSocket != null){
                 serverSocket.close();
+                serverSocket = null;
             }
         } catch (IOException e) {
             Log.e(TAG, "close tcp server error: " + e);
         }
+        httpServer.stop();
     }
 
     private byte readHead(InputStream stream) throws IOException {
@@ -223,7 +243,7 @@ public class TcpService extends Service {
         Log.i(TAG, "prepare start server");
         try {
             localServerSocket = new LocalServerSocket(HEAD);
-            while (true){
+            while (localServerSocket != null){
                 LocalSocket clientSocket = null;
                 try {
                     clientSocket = localServerSocket.accept();
@@ -262,7 +282,7 @@ public class TcpService extends Service {
                 mListener.onMessage();
             }
             setListenPort(port);
-            while (true){
+            while (serverSocket != null && !serverSocket.isClosed()){
                 Socket clientSocket = null;
                 try {
                     clientSocket = serverSocket.accept();
@@ -327,6 +347,11 @@ public class TcpService extends Service {
     public void setAudioManager(AudioManager audioManager){
         mAudioManager = audioManager;
         maxAudioVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        httpServer.setAudioManager(audioManager);
+    }
+
+    public void setVersionName(String versionName){
+        httpServer.setVersionName(versionName);
     }
 
     private void playAudio(int sampleRateInHz, int channelConfig, int audioEncoding, int bufferSizeInBytes, Closeable closer, InputStream inputStream, OutputStream outputStream){
