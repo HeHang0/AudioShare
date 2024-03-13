@@ -1,0 +1,3 @@
+[submodule "musiche"]
+	path = musiche
+	url = https://github.com/HeHang0/musiche.git

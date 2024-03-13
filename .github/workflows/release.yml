@@ -13,9 +13,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1
+
+      - name: Setup Pages
+        uses: actions/setup-node@v3
 
       - name: Setup JDK 17
         uses: actions/setup-java@v3
@@ -27,6 +32,11 @@ jobs:
       - name: Build
         run: |
           powershell
+          cd musiche/web
+          yarn
+          yarn build
+          cd ..\..
+          copy musiche\web\dist android\app\src\main\assets -Recurse
           cd windows
           echo "<Weavers><Costura/></Weavers>" > FodyWeavers.xml
           msbuild AudioShare.sln -t:"Restore;Build" /p:Configuration=Release /p:Platform="Any CPU"
