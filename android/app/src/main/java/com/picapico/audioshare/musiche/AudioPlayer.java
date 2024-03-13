@@ -1,11 +1,19 @@
 package com.picapico.audioshare.musiche;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.media.AudioManager;
-import android.media.MediaPlayer;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+
+import androidx.annotation.NonNull;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.common.Timeline;
+import androidx.media3.exoplayer.ExoPlayer;
 
 import com.picapico.audioshare.musiche.notification.NotificationActions;
 import com.picapico.audioshare.musiche.notification.NotificationCallback;
@@ -18,25 +26,31 @@ import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
 
-public class AudioPlayer implements OnActionReceiveListener {
+public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
     private static final String TAG = "AudioShareAudioPlayer";
+    private final Handler handler = new Handler(Looper.getMainLooper());
     enum LoopType {
         Single, Random, Order, Loop
     }
-    private final Handler mHandler = new Handler(Looper.getMainLooper());
+
     private AudioManager mAudioManager = null;
     private int maxAudioVolume = 15;
     private LoopType loopType = LoopType.Loop;
+    private MusicItem.Quality quality = MusicItem.Quality.PQ;
     private boolean stopped = true;
-    MediaPlayer mediaPlayer = new MediaPlayer();
-    MusicPlayRequest mMusicPlayRequest;
-    NotificationCallback mNotificationCallback;
-    public interface PositionChangedListener {
+    private boolean playing = false;
+    private int position = 0;
+    private int duration = 0;
+    private final ExoPlayer mediaPlayer;
+    private MusicPlayRequest mMusicPlayRequest;
+    private final NotificationCallback mNotificationCallback;
+    private Timer progressTimer;
+    public interface OnPositionChangedListener {
         void onPositionChanged();
     }
-    private PositionChangedListener positionChangedListener = null;
+    private OnPositionChangedListener positionChangedListener = null;
 
-    public void setOnLoadSuccessListener(PositionChangedListener listener){
+    public void setOnLoadSuccessListener(OnPositionChangedListener listener){
         positionChangedListener = listener;
     }
     public interface MediaMetaChangedListener {
@@ -48,28 +62,79 @@ public class AudioPlayer implements OnActionReceiveListener {
     public void setMediaMetaChangedListener(MediaMetaChangedListener listener){
         mediaMetaChangedListener = listener;
     }
-    public AudioPlayer(){
-        mediaPlayer.setOnCompletionListener(this::onCompletion);
+
+    public AudioPlayer(Context context){
+        mediaPlayer = new ExoPlayer.Builder(context).build();
+        mediaPlayer.addListener(this);
         mNotificationCallback = new NotificationCallback();
         mNotificationCallback.setOnActionReceiveListener(this);
-        new Timer().schedule(onProgressTimer, 0, 500);
     }
 
-    TimerTask onProgressTimer = new TimerTask() {
-        @Override
-        public void run() {
-            if(mediaPlayer.isPlaying() && positionChangedListener != null){
-                positionChangedListener.onPositionChanged();
-                updateMediaMetadataPosition();
+    @Override
+    public void onTimelineChanged(@NonNull Timeline timeline, int reason) {
+        duration = (int) mediaPlayer.getDuration();
+        position = (int) mediaPlayer.getCurrentPosition();
+        Log.i(TAG, "onTimelineChanged: " + timeline + " " + reason);
+    }
+    @Override
+    public void onIsLoadingChanged(boolean isLoading) {
+        Log.i(TAG, "onIsLoadingChanged: " + isLoading);
+    }
+    @Override
+    public void onPlaybackStateChanged(int playbackState) {
+        Log.i(TAG, "onPlayerStateChanged: " + playbackState);
+        if(playbackState == Player.STATE_ENDED){
+            next();
+        }
+    }
+    @Override
+    public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+        Log.i(TAG, "onPlayWhenReadyChanged: " + playWhenReady);
+    }
+    @Override
+    public void onIsPlayingChanged(boolean isPlaying) {
+        Log.i(TAG, "onIsPlayingChanged: " + isPlaying);
+        playing = isPlaying;
+        if(positionChangedListener != null){
+            positionChangedListener.onPositionChanged();
+        }
+        updateMediaMetadataPosition();
+        if(playing && progressTimer == null){
+            progressTimer = new Timer();
+            progressTimer.schedule(getProgressTimerTask(), 0, 500);
+        }else if(!playing && progressTimer != null){
+            try {
+                progressTimer.cancel();
+                progressTimer = null;
+            }catch (Exception e){
+                Log.e(TAG, "cancel timer error: ", e);
             }
         }
-    };
+    }
+    @Override
+    public void onPlayerError(@NonNull PlaybackException error) {
+        Log.e(TAG, "onPlayerError: ", error);
+    }
+
+    private TimerTask getProgressTimerTask(){
+        return new TimerTask() {
+            @Override
+            public void run() {
+                if(!playing || positionChangedListener == null) return;
+                handler.post(() -> {
+                    position = (int) mediaPlayer.getCurrentPosition();
+                    positionChangedListener.onPositionChanged();
+                    updateMediaMetadataPosition();
+                });
+            }
+        };
+    }
     @Override
     public void onActionReceive(String action) {
         switch (action){
             case NotificationActions.ACTION_NEXT: next();break;
             case NotificationActions.ACTION_PREVIOUS: last();break;
-            case NotificationActions.ACTION_PLAY_PAUSE: if(mediaPlayer.isPlaying()) pause();else play();break;
+            case NotificationActions.ACTION_PLAY_PAUSE: if(playing) pause();else play();break;
             case NotificationActions.ACTION_PLAY: play();break;
             case NotificationActions.ACTION_PAUSE: pause();break;
             case NotificationActions.ACTION_LOVER: break;
@@ -92,8 +157,8 @@ public class AudioPlayer implements OnActionReceiveListener {
     public void setLoopType(LoopType loopType) {
         this.loopType = loopType;
     }
-    private void onCompletion(MediaPlayer mp) {
-        next();
+    public void setQuality(MusicItem.Quality quality) {
+        this.quality = quality;
     }
     private void updateMediaMetadata(){
         if(mediaMetaChangedListener == null || mMusicPlayRequest == null || mMusicPlayRequest.getMusic() == null) return;
@@ -104,16 +169,16 @@ public class AudioPlayer implements OnActionReceiveListener {
                 musicItem.getAlbum(),
                 musicItem.getImage(),
                 false,
-                mediaPlayer.isPlaying(),
-                mediaPlayer.getCurrentPosition(),
-                mediaPlayer.getDuration()
-                );
+                playing,
+                position,
+                duration
+        );
     }
     private void updateMediaMetadataPosition(){
         if(mediaMetaChangedListener == null || mMusicPlayRequest == null || mMusicPlayRequest.getMusic() == null) return;
         mediaMetaChangedListener.onMediaMetaChanged(
-                mediaPlayer.isPlaying(),
-                mediaPlayer.getDuration()
+                playing,
+                duration
         );
     }
     public void last(){
@@ -152,28 +217,49 @@ public class AudioPlayer implements OnActionReceiveListener {
         play(mMusicPlayRequest.getPlaylist().get(index));
     }
     public void play(){
-        try {
-            mediaPlayer.start();
-            stopped = false;
-        } catch (Exception e) {
-            Log.e(TAG, "play error", e);
+        handler.post(() -> {
+            boolean needPlay = false;
+            try {
+                mediaPlayer.play();
+                stopped = false;
+            } catch (Exception e) {
+                Log.e(TAG, "play error", e);
+                needPlay = true;
+            }
+            if(!needPlay && mediaPlayer.getDuration() > 0){
+                return;
+            }
             if(this.mMusicPlayRequest != null){
                 play(this.mMusicPlayRequest.getMusic());
             }
-        }
+        });
     }
     public void play(String url){
-        if(url == null) return;
-        try {
-            mediaPlayer.reset();
-            mediaPlayer.setDataSource(url);
-            mediaPlayer.prepare();
-            mediaPlayer.start();
-            stopped = false;
-            updateMediaMetadata();
-        } catch (Exception e) {
-            Log.e(TAG, "play url error," + url, e);
+        if(url == null || url.isEmpty()) {
+            pause();
+            return;
         }
+        play(Uri.parse(url));
+    }
+    public void play(Uri uri){
+        if(uri == null) {
+            pause();
+            return;
+        }
+        handler.post(() -> {
+            try {
+                mediaPlayer.stop();
+                Log.i(TAG, "play url " + uri);
+                mediaPlayer.setMediaItem(MediaItem.fromUri(uri));
+                mediaPlayer.prepare();
+                mediaPlayer.play();
+                stopped = false;
+                updateMediaMetadata();
+            } catch (Exception e) {
+                pause();
+                Log.e(TAG, "play url error," + uri, e);
+            }
+        });
     }
     private int lastIndex = 0;
     public void play(int index){
@@ -193,20 +279,14 @@ public class AudioPlayer implements OnActionReceiveListener {
                 this.mMusicPlayRequest.setIndex(playlist.size() - 1);
             }
         }
-        String url = musicItem.getUrl();
-        if(url == null || url.isEmpty()){
-            musicItem.getRemoteUrl(musicUrl -> {
-                if(musicUrl == null){
-                    this.mMusicPlayRequest.getPlaylist().remove(this.mMusicPlayRequest.getIndex());
-                    next();
-                }else {
-                    play(musicUrl);
-                }
-            });
-        }else {
-            play(url);
-            musicItem.setUrl(null);
-        }
+        musicItem.getMusicUrl(quality, musicUrl -> {
+            if(musicUrl == null){
+                this.mMusicPlayRequest.getPlaylist().remove(this.mMusicPlayRequest.getIndex());
+                next();
+            }else {
+                play(musicUrl);
+            }
+        });
     }
     public void play(MusicPlayRequest musicPlayRequest){
         this.mMusicPlayRequest = musicPlayRequest;
@@ -214,48 +294,56 @@ public class AudioPlayer implements OnActionReceiveListener {
             play(this.mMusicPlayRequest.getMusic());
         }
     }
-    public synchronized void setMusicPlayRequest(MusicPlayRequest musicPlayRequest){
+    public void setMusicPlayRequest(MusicPlayRequest musicPlayRequest){
         this.mMusicPlayRequest = musicPlayRequest;
     }
     public void pause(){
-        mediaPlayer.pause();
+        handler.post(() -> {
+            try{
+                mediaPlayer.pause();
+            }catch (Exception ignore){}
+        });
     }
     public void setProgress(int percent){
         double percentDouble = percent*1.0/1000;
-        percent = (int) (mediaPlayer.getDuration() * percentDouble);
-        mediaPlayer.seekTo(percent);
+        percent = (int) (duration * percentDouble);
+        if(percent > 0 && percent <= duration){
+            int finalPercent = percent;
+            handler.post(() -> mediaPlayer.seekTo(finalPercent));
+        }
     }
     public void setVolume(int percent){
         if(mAudioManager == null) return;
         double percentDouble = percent*1.0/100;
         percent = (int) (maxAudioVolume * percentDouble);
-        int finalPercent = percent;
-        mHandler.post(() -> {
-            try {
-                Log.i(TAG, "set music volume " + finalPercent);
-                mAudioManager.setStreamVolume(
-                        AudioManager.STREAM_MUSIC,
-                        finalPercent,
-                        AudioManager.FLAG_SHOW_UI);
-            } catch (Exception ignored){
-            }
-        });
+        try {
+            mAudioManager.setStreamVolume(
+                    AudioManager.STREAM_MUSIC,
+                    percent,
+                    AudioManager.FLAG_SHOW_UI);
+        } catch (Exception e){
+            Log.e(TAG, "set music volume error", e);
+        }
     }
 
     private int getVolume(){
-        return (int)(mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC)*100/maxAudioVolume);
+        if(mAudioManager != null) {
+            return (int)(mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC)*100/maxAudioVolume);
+        }else {
+            return 100;
+        }
     }
 
     private int getProgress(){
-        if(mediaPlayer.getDuration() == 0) return 0;
-        return (int)(mediaPlayer.getCurrentPosition() * 1000 / mediaPlayer.getDuration());
+        if(duration == 0) return 0;
+        return position * 1000 / duration;
     }
 
     @SuppressLint("DefaultLocale")
-    private String parseMMSS(int milliseconds){
+    private String parseMMSS(long milliseconds){
         if(milliseconds <= 0) return "00:00";
-        int second = milliseconds / 1000;
-        int minute = second / 60;
+        long second = milliseconds / 1000;
+        long minute = second / 60;
         second = second - minute * 60;
         return String.format("%02d", minute) + ":" + String.format("%02d", second);
     }
@@ -265,9 +353,9 @@ public class AudioPlayer implements OnActionReceiveListener {
         JSONObject data = new JSONObject();
         try {
             data.put("volume", getVolume());
-            data.put("currentTime", parseMMSS(mediaPlayer.getCurrentPosition()));
-            data.put("totalTime", parseMMSS(mediaPlayer.getDuration()));
-            data.put("playing", mediaPlayer.isPlaying());
+            data.put("currentTime", parseMMSS(position));
+            data.put("totalTime", parseMMSS(duration));
+            data.put("playing", playing);
             data.put("stopped", stopped);
             data.put("progress", getProgress());
             if(mMusicPlayRequest != null){

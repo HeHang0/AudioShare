@@ -10,6 +10,7 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.media.AudioManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -31,6 +32,7 @@ public class MainActivity extends AppCompatActivity {
     private TcpService tcpService = null;
     private boolean isBound = false;
     private TextView ipAddress;
+    private TextView manager;
     private String versionName;
     private LinearLayout connectedLayout;
     private LinearLayout unConnectedLayout;
@@ -65,11 +67,24 @@ public class MainActivity extends AppCompatActivity {
         setStatusBarTransparent();
         setVersionName();
         ipAddress = findViewById(R.id.ipAddress);
+        manager = findViewById(R.id.manager);
         connectedLayout = findViewById(R.id.connected);
         unConnectedLayout = findViewById(R.id.unconnected);
         Intent intent = new Intent(this, TcpService.class);
         startService(intent);
         bindService(intent, connection, Context.BIND_AUTO_CREATE);
+        manager.setOnClickListener(this::onManagerClick);
+        findViewById(R.id.imageView).setOnClickListener(this::onManagerClick);
+    }
+
+    private void onManagerClick(View e){
+        try {
+            Uri uri = Uri.parse(manager.getText().toString());
+            if(uri.isAbsolute()){
+                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                startActivity(intent);
+            }
+        }catch (Exception ignore){}
     }
 
     @Override
@@ -108,21 +123,27 @@ public class MainActivity extends AppCompatActivity {
         if(tcpService == null) return;
         runOnUiThread(() -> {
             int port = tcpService.getListenPort();
+            int httpPort = tcpService.getHttpPort();
             StringBuilder sb = new StringBuilder();
             List<InetAddress> ips = NetworkUtils.getAllInetAddress();
+            String ipv4 = "";
             if(ips.isEmpty()){
-                String ip = NetworkUtils.getIpAddress(this);
-                sb.append(ip).append(":").append(port).append("\n");
+                ipv4 = NetworkUtils.getIpAddress(this);
+                sb.append(ipv4).append(":").append(port).append("\n");
             }else {
                 for (InetAddress ip: ips) {
                     String address = ip.getHostAddress();
                     if(ip instanceof Inet6Address) {
                         address = "[" + address + "]";
+                    }else {
+                        ipv4 = address;
                     }
                     sb.append(address).append(":").append(port).append("\n");
                 }
             }
             ipAddress.setText(sb.toString().trim());
+            if(ipv4 == null || ipv4.isEmpty()) ipv4 = "127.0.0.1";
+            manager.setText("http://" + ipv4 + ":" + httpPort);
         });
     }
 

@@ -1,19 +1,15 @@
 package com.picapico.audioshare.musiche;
 
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.media.AudioManager;
-import android.net.Uri;
 import android.util.Log;
 
 import com.koushikdutta.async.ByteBufferList;
-import com.koushikdutta.async.http.AsyncHttpClient;
-import com.koushikdutta.async.http.AsyncHttpGet;
-import com.koushikdutta.async.http.AsyncHttpRequest;
 import com.koushikdutta.async.http.AsyncHttpResponse;
 import com.koushikdutta.async.http.Headers;
 import com.koushikdutta.async.http.WebSocket;
-import com.koushikdutta.async.http.body.StringBody;
 import com.koushikdutta.async.http.server.AsyncHttpServer;
 import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
 import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
@@ -47,13 +43,13 @@ public class HttpServer {
             return false;
         }
     };
-    AudioPlayer audioPlayer = new AudioPlayer();
+    AudioPlayer audioPlayer;
     List<WebSocket> _sockets = new ArrayList<>();
     SharedPreferences mPreferences;
     AssetManager mAssetManager;
-
-    public HttpServer(int port) {
+    public HttpServer(Context context, int port) {
         try {
+            audioPlayer = new AudioPlayer(context);
             server.listen(port);
             Log.i(TAG, "start server on: " + port);
         }catch (Exception e){
@@ -114,6 +110,7 @@ public class HttpServer {
         server.post("/maximize", empty);
         server.post("/minimize", empty);
         server.post("/loop", loop);
+        server.post("/quality", quality);
         server.post("/exit", pause);
         server.post("/hide", empty);
         server.post("/minimize", empty);
@@ -138,6 +135,7 @@ public class HttpServer {
         }
         InputStream inputStream = null;
         try {
+            mAssetManager.list("index.html");
             String urlPath = request.getPath().substring(1);
             inputStream = mAssetManager.open(urlPath);
         } catch (Exception ignore) {
@@ -286,7 +284,7 @@ public class HttpServer {
     };
     private final HttpServerRequestCallback status = (request, response) -> response.send(audioPlayer.getStatus());
     private final HttpServerRequestCallback loop = (request, response) -> {
-        String loopType = request.getBody().get().toString();
+        String loopType = request.getBody().get().toString().toLowerCase();
         switch (loopType)
         {
             case "single": audioPlayer.setLoopType(AudioPlayer.LoopType.Single); break;
@@ -294,33 +292,34 @@ public class HttpServer {
             case "order": audioPlayer.setLoopType(AudioPlayer.LoopType.Order); break;
             default: audioPlayer.setLoopType(AudioPlayer.LoopType.Loop); break;
         }
-        response.send(audioPlayer.getStatus());
+        response.send("application/json", "{\"data\":true}");
+    };
+    private final HttpServerRequestCallback quality = (request, response) -> {
+        String qualityType = request.getBody().get().toString().toLowerCase();
+        switch (qualityType)
+        {
+            case "sq": audioPlayer.setQuality(MusicItem.Quality.SQ); break;
+            case "hq": audioPlayer.setQuality(MusicItem.Quality.HQ); break;
+            case "zq": audioPlayer.setQuality(MusicItem.Quality.ZQ); break;
+            default: audioPlayer.setQuality(MusicItem.Quality.PQ); break;
+        }
+        response.send("application/json", "{\"data\":true}");
     };
     private final HttpServerRequestCallback image = (request, response) -> response.send("");
     private final HttpServerRequestCallback proxyGet = (request, response) -> {
         String url = request.getQuery().getString("url");
         if(url == null || url.isEmpty()) {
-            response.send("");
+            response.end();
             return;
         }
         try {
-            AsyncHttpRequest requestProxy = new AsyncHttpGet(url);
-            AsyncHttpClient.getDefaultInstance().executeByteBufferList(requestProxy, new AsyncHttpClient.DownloadCallback() {
-                @Override
-                public void onCompleted(Exception e, AsyncHttpResponse source, ByteBufferList result) {
-                    if(e != null){
-                        Log.e(TAG, "send proxy get error", e);
-                    }
-                    Log.d(TAG, "response request [" + request.getMethod() + "] " + request.getPath());
-                    responseProxyData(response, source, result);
-                }
-            });
+            HttpProxy.handle(url, (source, result) -> responseProxyData(response, source, result));
         }catch (Exception e){
             Log.e(TAG, "send proxy get error", e);
+            response.end();
         }
     };
 
-    private static final String UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36";
     private final HttpServerRequestCallback proxyPost = (request, response) -> {
         Object body = request.getBody().get();
         ProxyRequestData proxyRequestData = ProxyRequestData.of(body);
@@ -329,35 +328,8 @@ public class HttpServer {
             response.send("");
             return;
         }
-        AsyncHttpRequest requestProxy = new AsyncHttpRequest(Uri.parse(url), proxyRequestData.getMethod());
-        requestProxy.setFollowRedirect(proxyRequestData.isAllowAutoRedirect());
-        boolean userAgentSet = false;
-        for (String key: proxyRequestData.getHeaders().keySet()) {
-            switch (key.toLowerCase().replaceAll("-", "")){
-                case "useragent":
-                    userAgentSet = true;
-                    requestProxy.setHeader("User-Agent", proxyRequestData.getHeaders().get(key));
-                    break;
-                case "contenttype": requestProxy.setHeader("Content-Type", proxyRequestData.getHeaders().get(key));break;
-                default: requestProxy.setHeader(key, proxyRequestData.getHeaders().get(key));
-            }
-
-        }
-        if(!userAgentSet) requestProxy.setHeader("User-Agent", UserAgent);
-        if(proxyRequestData.hasBody()){
-            requestProxy.setBody(new StringBody(proxyRequestData.getData()));
-        }
         try {
-            AsyncHttpClient.getDefaultInstance().executeByteBufferList(requestProxy, new AsyncHttpClient.DownloadCallback() {
-                @Override
-                public void onCompleted(Exception e, AsyncHttpResponse source, ByteBufferList result) {
-                    if(e != null){
-                        Log.e(TAG, "send proxy post error", e);
-                    }
-                    Log.d(TAG, "response request [" + request.getMethod() + "] " + request.getPath());
-                    responseProxyData(response, source, result);
-                }
-            });
+            HttpProxy.handle(proxyRequestData, (source, result) -> responseProxyData(response, source, result));
         }catch (Exception e){
             Log.e(TAG, "http proxy post error", e);
             response.end();
@@ -446,10 +418,6 @@ public class HttpServer {
                 _sockets.remove(webSocket);
             }
         });
-//        webSocket.setStringCallback(s -> {
-//            if ("Hello Server".equals(s))
-//                webSocket.send("Welcome Client!");
-//        });
     };
 
     public void sendWSMessage(String message){

@@ -4,11 +4,13 @@ import android.util.Base64;
 import android.util.Log;
 
 import com.koushikdutta.async.http.AsyncHttpClient;
+import com.koushikdutta.async.http.AsyncHttpGet;
 import com.koushikdutta.async.http.AsyncHttpPost;
 import com.koushikdutta.async.http.AsyncHttpRequest;
 import com.koushikdutta.async.http.AsyncHttpResponse;
 import com.koushikdutta.async.http.body.StringBody;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -23,6 +25,9 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class MusicItem {
+    enum Quality {
+        PQ, SQ, HQ, ZQ
+    }
     private static final String TAG = "AudioShareMusicItem";
     private static final String EncSecKey = "&encSecKey=409afd10f2fa06173df57525287c4a1cdf6fa08bd542c6400da953704eb92dc1ad3c582e82f51a707ebfa0f6a25bcd185139fc1509d40dd97b180ed21641df55e90af4884a0b587bd25256141a9270b1b6f18908c6a626b74167e5a55a796c0f808a2eb12c33e63d34a7c4d358bab1dc661637dd1e888a1268b81a89f6136053";
     private static final String CloudMusicAPI = "https://music.163.com/weapi/song/enhance/player/url?csrf_token=";
@@ -30,31 +35,36 @@ public class MusicItem {
     private String id;
     private String name;
     private String image;
-//    private String mediumImage;
-//    private String largeImage;
     private String singer;
     private String album;
     private String remark;
-    private String url;
     private String cookie;
     private String musicU = "";
+    private String uid = "";
     private String csrf = "";
     private String type;
-    private boolean audition;
+
     public interface onUrlLoadedCallback {
         void onUrlLoaded(String url);
     }
-    public void getRemoteUrl(onUrlLoadedCallback callback){
+    public void getMusicUrl(Quality quality, onUrlLoadedCallback callback){
+        Log.i(TAG, "get play url: " + name + " " + type);
         switch (type){
-            case "cloud": getCloudMusicUrl(callback);break;
-            case "qq": getQQMusicUrl(callback);break;
-            case "migu": getMiGuMusicUrl(callback);break;
+            case "cloud": getCloudMusicUrl(quality, callback);break;
+            case "qq": getQQMusicUrl(quality, callback, false);break;
+            case "migu": getMiGuMusicUrl(quality, callback);break;
             default:
                 callback.onUrlLoaded(null);break;
         }
     }
-    private void getCloudMusicUrl(onUrlLoadedCallback callback){
-        int br = 320000;
+    private void getCloudMusicUrl(Quality quality, onUrlLoadedCallback callback){
+        int br;
+        switch (quality){
+            case HQ: br = 320000; break;
+            case SQ: br = 480000; break;
+            case ZQ: br = 960000; break;
+            default: br = 128000; break;
+        }
         Map<String, Object> data = new HashMap<>();
         data.put("ids", new String[]{id});
         data.put("br", br);
@@ -95,11 +105,109 @@ public class MusicItem {
             callback.onUrlLoaded(null);
         }
     }
-    private void getQQMusicUrl(onUrlLoadedCallback callback){
-        callback.onUrlLoaded(null);
+    private static int now(){
+        return (int) (System.currentTimeMillis()/1000);
     }
-    private void getMiGuMusicUrl(onUrlLoadedCallback callback){
-        callback.onUrlLoaded(null);
+    private void getQQMusicUrl(Quality quality, onUrlLoadedCallback callback, boolean audition){
+        String fileName = "";
+        if(audition && remark != null && !remark.isEmpty()){
+            fileName = "\"" + remark + "\"";
+        }
+        String body = "{\"comm\":{\"cv\":4747474,\"ct\":24,\"format\":\"json\"," +
+                "\"inCharset\":\"utf-8\",\"outCharset\":\"utf-8\",\"notice\":0," +
+                "\"platform\":\"yqq.json\",\"needNewCode\":1}," +
+                "\"req_0\":{\"module\":\"vkey.GetVkeyServer\"," +
+                "\"method\":\"CgiGetVkey\"," +
+                "\"param\":{" +
+                "\"guid\":\"" + now() + "\"," +
+                "\"songmid\":[\"" + id + "\"]," +
+                "\"songtype\":[0],\"uin\":\"\",\"loginflag\":1,\"platform\":\"20\"," +
+                "\"filename\":[" + fileName + "]}}}";
+        try {
+            AsyncHttpRequest request = new AsyncHttpPost("https://u.y.qq.com/cgi-bin/musicu.fcg");
+            request.setHeader("Referer", "https://y.qq.com");
+            request.setHeader("Content-Type", "application/json");
+            request.setHeader("Cookie", cookie);
+            request.setBody(new StringBody(body));
+            AsyncHttpClient.getDefaultInstance().executeJSONObject(request, new AsyncHttpClient.JSONObjectCallback() {
+                @Override
+                public void onCompleted(Exception e, AsyncHttpResponse source, JSONObject result) {
+                    if(result == null) {
+                        callback.onUrlLoaded(null);
+                        return;
+                    }
+                    String musicUrl = null;
+                    try{
+                        JSONObject data = result.getJSONObject("req_0").getJSONObject("data");
+                        String pUrl = data.getJSONArray("midurlinfo").getJSONObject(0).getString("purl");
+                        JSONArray sip = data.getJSONArray("sip");
+                        String urlPrefix = null;
+                        for (int i = 0; i < sip.length(); i++) {
+                            String host = sip.getString(i);
+                            if(host != null && !host.isEmpty()){
+                                urlPrefix = host;
+                                break;
+                            }
+                        }
+                        if(urlPrefix == null){
+                            urlPrefix = "https://dl.stream.qqmusic.qq.com/";
+                        }
+                        if(!pUrl.isEmpty()) musicUrl = urlPrefix + pUrl;
+                    }catch (Exception ex){
+                        Log.e(TAG, "get qq music url error", ex);
+                    }
+                    if(musicUrl == null && !audition){
+                        getQQMusicUrl(quality, callback, true);
+                    }else {
+                        callback.onUrlLoaded(musicUrl);
+                    }
+                }
+            });
+        }catch (Exception e){
+            Log.e(TAG, "get cloud url error", e);
+            callback.onUrlLoaded(null);
+        }
+    }
+    private void getMiGuMusicUrl(Quality quality, onUrlLoadedCallback callback){
+        String toneFlag = "PQ";
+        switch (quality){
+            case HQ: toneFlag = "HQ"; break;
+            case SQ: toneFlag = "SQ"; break;
+            case ZQ: toneFlag = "ZQ"; break;
+        }
+        String requestUrl =
+                "https://c.musicapp.migu.cn/MIGUM3.0/strategy/listen-url/v2.4?" +
+                        "resourceType=2&netType=01&scene=" +
+                        "&toneFlag=" + toneFlag +
+                        "&contentId=" + remark +
+                        "&copyrightId=" + id +
+                        "&lowerQualityContentId=" + id;
+        try {
+            AsyncHttpRequest request = new AsyncHttpGet(requestUrl);
+            request.setHeader("channel", "014000D");
+            request.setHeader("uid", uid);
+            request.setHeader("Cookie", cookie);
+            AsyncHttpClient.getDefaultInstance().executeJSONObject(request, new AsyncHttpClient.JSONObjectCallback() {
+                @Override
+                public void onCompleted(Exception e, AsyncHttpResponse source, JSONObject result) {
+                    String url = null;
+                    if(result != null && result.has("data")){
+                        try {
+                            JSONObject obj = result.getJSONObject("data");
+                            if(obj.has("url")) {
+                                url = obj.getString("url").replace("http://", "https://");
+                            }
+                        } catch (JSONException ex) {
+                            Log.e(TAG, "get cloud url error", ex);
+                        }
+                    }
+                    callback.onUrlLoaded(url);
+                }
+            });
+        }catch (Exception e){
+            Log.e(TAG, "get cloud url error", e);
+            callback.onUrlLoaded(null);
+        }
     }
     private String aesEncrypt(String plain, String key){
         String iv = "0102030405060708";
@@ -140,12 +248,6 @@ public class MusicItem {
             if(jsonObject.has("remark")){
                 musicItem.setRemark(jsonObject.getString("remark"));
             }
-            if(jsonObject.has("audition")){
-                musicItem.setAudition(jsonObject.getBoolean("audition"));
-            }
-//            if(jsonObject.has("url")){
-//                musicItem.setUrl(jsonObject.getString("url"));
-//            }
             if(jsonObject.has("type")){
                 musicItem.setType(jsonObject.getString("type"));
             }
@@ -158,6 +260,14 @@ public class MusicItem {
                     if(typeObj.has("MUSIC_U")){
                         musicItem.setMusicU(typeObj.getString("MUSIC_U"));
                     }
+                }else if("migu".equals(musicItem.getType())) {
+                    JSONObject typeObj = jsonObject.getJSONObject("cookie");
+                    if(typeObj.has("cookie")){
+                        musicItem.setCookie(typeObj.getString("cookie"));
+                    }
+                    if(typeObj.has("uid")){
+                        musicItem.setUid(typeObj.getString("uid"));
+                    }
                 }else {
                     musicItem.setCookie(jsonObject.getString("cookie"));
                 }
@@ -168,12 +278,8 @@ public class MusicItem {
         return musicItem;
     }
 
-    public String getUrl() {
-        return url;
-    }
-
-    public void setUrl(String url) {
-        this.url = url;
+    public void setUid(String uid) {
+        this.uid = uid;
     }
 
     public String getId() {
@@ -216,20 +322,8 @@ public class MusicItem {
         this.album = album;
     }
 
-    public String getRemark() {
-        return remark;
-    }
-
     public void setRemark(String remark) {
         this.remark = remark;
-    }
-
-    public boolean isAudition() {
-        return audition;
-    }
-
-    public void setAudition(boolean audition) {
-        this.audition = audition;
     }
 
     public String getCookie() {

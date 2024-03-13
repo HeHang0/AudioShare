@@ -71,22 +71,8 @@ public class TcpService extends NotificationService {
         Log.i(TAG, "Service on created");
         new Thread(this::startLocalServer).start();
         new Thread(this::startServer).start();
-        httpServer = new HttpServer(8080);
+        this.startHttpServer();
         startBroadcastTimer();
-        httpServer.getAudioPlayer().setMediaMetaChangedListener(new AudioPlayer.MediaMetaChangedListener() {
-            @Override
-            public void onMediaMetaChanged(boolean playing, int position) {
-                setMetaData(playing, position);
-            }
-
-            @Override
-            public void onMediaMetaChanged(String title, String artist, String album, String artwork, boolean lover, boolean playing, int position, int duration) {
-                setMetaData(title, artist, album, artwork, lover, playing, position, duration);
-            }
-        });
-        this.setMediaSessionCallback(httpServer.getAudioPlayer().getNotificationCallback());
-        httpServer.setSharedPreferences(getSharedPreferences("config", Context.MODE_PRIVATE));
-        httpServer.setAssetManager(getAssets());
     }
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -272,7 +258,25 @@ public class TcpService extends NotificationService {
             }
         }
     }
+    private void startHttpServer(){
+        int port = NetworkUtils.getFreePort(8080);
+        this.setHttpPort(port);
+        httpServer = new HttpServer(getApplicationContext(), port);
+        httpServer.getAudioPlayer().setMediaMetaChangedListener(new AudioPlayer.MediaMetaChangedListener() {
+            @Override
+            public void onMediaMetaChanged(boolean playing, int position) {
+                setMetaData(playing, position);
+            }
 
+            @Override
+            public void onMediaMetaChanged(String title, String artist, String album, String artwork, boolean lover, boolean playing, int position, int duration) {
+                setMetaData(title, artist, album, artwork, lover, playing, position, duration);
+            }
+        });
+        this.setMediaSessionCallback(httpServer.getAudioPlayer().getNotificationCallback());
+        httpServer.setSharedPreferences(getSharedPreferences("config", Context.MODE_PRIVATE));
+        httpServer.setAssetManager(getAssets());
+    }
     private void startServer(){
         Log.i(TAG, "prepare start server");
         try {
@@ -338,6 +342,16 @@ public class TcpService extends NotificationService {
 
     public synchronized int getListenPort() {
         return listenPort;
+    }
+
+    private int httpPort = 8088;
+
+    private synchronized void setHttpPort(int httpPort) {
+        this.httpPort = httpPort;
+    }
+
+    public synchronized int getHttpPort() {
+        return httpPort;
     }
 
     public void setMessageListener(MessageListener listener){

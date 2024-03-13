@@ -31,7 +31,6 @@ public class MusicPlayRequest {
                             Objects.equals(musicItem.getId(), music.getId()) &&
                             Objects.equals(musicItem.getType(), music.getType())) {
                         musicPlayRequest.setIndex(i);
-                        music.setUrl(musicItem.getUrl());
                         playlist.add(music);
                         musicPlayRequest.setMusic(music);
                     }else {

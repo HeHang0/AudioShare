@@ -55,7 +55,7 @@ public class ProxyRequestData {
     }
 
     public String getMethod() {
-        if(method == null || method.isEmpty()) return "get";
+        if(method == null || method.isEmpty()) return "GET";
         return method.toUpperCase();
     }
 
