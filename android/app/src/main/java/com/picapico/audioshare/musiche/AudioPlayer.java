@@ -3,16 +3,20 @@ package com.picapico.audioshare.musiche;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.media.AudioManager;
-import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
+import androidx.media3.common.AudioAttributes;
+import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.Timeline;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
 
 import com.picapico.audioshare.musiche.notification.NotificationActions;
@@ -29,9 +33,45 @@ import java.util.TimerTask;
 public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
     private static final String TAG = "AudioShareAudioPlayer";
     private final Handler handler = new Handler(Looper.getMainLooper());
+
+    public void setChannel(@ChannelType int channel) {
+        if(this.mChannel == channel) return;
+        this.mChannel = channel;
+        handler.post(() -> {
+            if(channel == ChannelTypeNone){
+                mediaPlayer.setVolume(0);
+            }else {
+                mediaPlayer.setVolume(1);
+            }
+        });
+    }
+
+    public int getChannel() {
+        return mChannel;
+    }
+
+    public boolean isPlaying(){
+        return playing;
+    }
+
     enum LoopType {
         Single, Random, Order, Loop
     }
+
+    public static final int ChannelTypeNone = -1;
+    public static final int ChannelTypeStereo = 0;
+    public static final int ChannelTypeLeft = 1;
+    public static final int ChannelTypeRight = 2;
+    @IntDef(
+            value = {
+                    ChannelTypeNone,
+                    ChannelTypeStereo,
+                    ChannelTypeLeft,
+                    ChannelTypeRight
+            }
+    )
+    public @interface ChannelType {}
+    private @ChannelType int mChannel = ChannelTypeStereo;
 
     private AudioManager mAudioManager = null;
     private int maxAudioVolume = 15;
@@ -41,17 +81,22 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
     private boolean playing = false;
     private int position = 0;
     private int duration = 0;
+    private String url = "";
     private final ExoPlayer mediaPlayer;
     private MusicPlayRequest mMusicPlayRequest;
     private final NotificationCallback mNotificationCallback;
     private Timer progressTimer;
-    public interface OnPositionChangedListener {
+    public interface OnChangedListener {
         void onPositionChanged();
+        void onPositionChanged(long position);
+        void onPaused();
+        void onVolumeChanged(int volume);
+        void onPlaying(boolean remote, String url, MusicItem music, int volume);
     }
-    private OnPositionChangedListener positionChangedListener = null;
+    private OnChangedListener changedListener = null;
 
-    public void setOnLoadSuccessListener(OnPositionChangedListener listener){
-        positionChangedListener = listener;
+    public void setOnLoadSuccessListener(OnChangedListener listener){
+        changedListener = listener;
     }
     public interface MediaMetaChangedListener {
         void onMediaMetaChanged(boolean playing, int position);
@@ -63,8 +108,13 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
         mediaMetaChangedListener = listener;
     }
 
-    public AudioPlayer(Context context){
+    @OptIn(markerClass = UnstableApi.class) public AudioPlayer(Context context){
+        AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build();
         mediaPlayer = new ExoPlayer.Builder(context).build();
+        mediaPlayer.setAudioAttributes(audioAttributes, true);
         mediaPlayer.addListener(this);
         mNotificationCallback = new NotificationCallback();
         mNotificationCallback.setOnActionReceiveListener(this);
@@ -74,7 +124,8 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
     public void onTimelineChanged(@NonNull Timeline timeline, int reason) {
         duration = (int) mediaPlayer.getDuration();
         position = (int) mediaPlayer.getCurrentPosition();
-        Log.i(TAG, "onTimelineChanged: " + timeline + " " + reason);
+        updateMediaMetadata();
+        Log.i(TAG, String.format("on timeline changed, duration: %d, position: %d", duration, position));
     }
     @Override
     public void onIsLoadingChanged(boolean isLoading) {
@@ -83,7 +134,7 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
     @Override
     public void onPlaybackStateChanged(int playbackState) {
         Log.i(TAG, "onPlayerStateChanged: " + playbackState);
-        if(playbackState == Player.STATE_ENDED){
+        if(playbackState == Player.STATE_ENDED && !remote){
             next();
         }
     }
@@ -91,18 +142,29 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
     public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
         Log.i(TAG, "onPlayWhenReadyChanged: " + playWhenReady);
     }
+    private int playingChangedDelay = 0;
+    private long lastStatusTime = 0;
     @Override
     public void onIsPlayingChanged(boolean isPlaying) {
         Log.i(TAG, "onIsPlayingChanged: " + isPlaying);
         playing = isPlaying;
-        if(positionChangedListener != null){
-            positionChangedListener.onPositionChanged();
+        if(playing){
+            playingChangedDelay = (int) (System.currentTimeMillis() - lastStatusTime);
+        }else {
+            lastStatusTime = System.currentTimeMillis();
         }
-        updateMediaMetadataPosition();
+        if(changedListener != null){
+            changedListener.onPositionChanged();
+            if(playing && mMusicPlayRequest != null && url != null && !url.isEmpty()) {
+                changedListener.onPlaying(remote, url, mMusicPlayRequest.getMusic(), volume);
+            }
+        }
+
+        updateMediaMetadata();
         if(playing && progressTimer == null){
             progressTimer = new Timer();
             progressTimer.schedule(getProgressTimerTask(), 0, 500);
-        }else if(!playing && progressTimer != null){
+        }else if(!playing && progressTimer != null && !remote){
             try {
                 progressTimer.cancel();
                 progressTimer = null;
@@ -120,10 +182,11 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
         return new TimerTask() {
             @Override
             public void run() {
-                if(!playing || positionChangedListener == null) return;
+                if(!playing || changedListener == null) return;
                 handler.post(() -> {
                     position = (int) mediaPlayer.getCurrentPosition();
-                    positionChangedListener.onPositionChanged();
+                    changedListener.onPositionChanged();
+                    if(remote)changedListener.onPlaying(true, null, null, 0);
                     updateMediaMetadataPosition();
                 });
             }
@@ -153,6 +216,7 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
     public void setAudioManager(AudioManager audioManager){
         mAudioManager = audioManager;
         maxAudioVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        volume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC)*100/maxAudioVolume;
     }
     public void setLoopType(LoopType loopType) {
         this.loopType = loopType;
@@ -161,7 +225,7 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
         this.quality = quality;
     }
     private void updateMediaMetadata(){
-        if(mediaMetaChangedListener == null || mMusicPlayRequest == null || mMusicPlayRequest.getMusic() == null) return;
+        if(stopped || mediaMetaChangedListener == null || mMusicPlayRequest == null || mMusicPlayRequest.getMusic() == null) return;
         MusicItem musicItem = mMusicPlayRequest.getMusic();
         mediaMetaChangedListener.onMediaMetaChanged(
                 musicItem.getName(),
@@ -178,7 +242,7 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
         if(mediaMetaChangedListener == null || mMusicPlayRequest == null || mMusicPlayRequest.getMusic() == null) return;
         mediaMetaChangedListener.onMediaMetaChanged(
                 playing,
-                duration
+                position
         );
     }
     public void last(){
@@ -216,7 +280,9 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
         }
         play(mMusicPlayRequest.getPlaylist().get(index));
     }
+
     public void play(){
+        if(playing) return;
         handler.post(() -> {
             boolean needPlay = false;
             try {
@@ -232,17 +298,28 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
             if(this.mMusicPlayRequest != null){
                 play(this.mMusicPlayRequest.getMusic());
             }
+            volume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC)*100/maxAudioVolume;
         });
     }
-    public void play(String url){
-        if(url == null || url.isEmpty()) {
-            pause();
+    private boolean remote = false;
+    public void play(String uri, MusicItem musicItem){
+        if(uri != null && !uri.isEmpty() && uri.equals(url)) {
+            play();
+            remote = true;
             return;
         }
-        play(Uri.parse(url));
+        if(musicItem != null) {
+            if(mMusicPlayRequest == null) {
+                mMusicPlayRequest = new MusicPlayRequest();
+            }
+            mMusicPlayRequest.setMusic(musicItem);
+        }
+        play(uri);
+        remote = true;
     }
-    public void play(Uri uri){
-        if(uri == null) {
+    public void play(String uri){
+        remote = false;
+        if(uri == null || uri.isEmpty()) {
             pause();
             return;
         }
@@ -253,20 +330,23 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
                 mediaPlayer.setMediaItem(MediaItem.fromUri(uri));
                 mediaPlayer.prepare();
                 mediaPlayer.play();
+                this.url = uri;
                 stopped = false;
-                updateMediaMetadata();
             } catch (Exception e) {
                 pause();
-                Log.e(TAG, "play url error," + uri, e);
+                Log.e(TAG, "play url error," + url, e);
             }
+            volume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC)*100/maxAudioVolume;
         });
     }
     private int lastIndex = 0;
     public void play(int index){
+        remote = false;
         if(this.mMusicPlayRequest == null) return;
         play(this.mMusicPlayRequest.getPlaylist().get(index));
     }
     public void play(MusicItem musicItem){
+        remote = false;
         if(musicItem == null) return;
         if(this.mMusicPlayRequest != null){
             lastIndex = this.mMusicPlayRequest.getIndex();
@@ -289,6 +369,7 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
         });
     }
     public void play(MusicPlayRequest musicPlayRequest){
+        remote = false;
         this.mMusicPlayRequest = musicPlayRequest;
         if(this.mMusicPlayRequest.getMusic() != null){
             play(this.mMusicPlayRequest.getMusic());
@@ -298,9 +379,12 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
         this.mMusicPlayRequest = musicPlayRequest;
     }
     public void pause(){
+        playing = false;
         handler.post(() -> {
             try{
+                if(!mediaPlayer.isPlaying()) return;
                 mediaPlayer.pause();
+                changedListener.onPaused();
             }catch (Exception ignore){}
         });
     }
@@ -312,8 +396,19 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
             handler.post(() -> mediaPlayer.seekTo(finalPercent));
         }
     }
+    public void setPosition(int pos){
+        if(pos <= 0) return;
+        handler.post(() -> {
+            int posReal = pos + 10 + Math.min(50, Math.abs(playingChangedDelay*2));
+            int position = (int) mediaPlayer.getCurrentPosition();
+            if(posReal < duration && posReal > position + 150) {
+                mediaPlayer.seekTo(posReal);
+            }
+        });
+    }
     public void setVolume(int percent){
-        if(mAudioManager == null) return;
+        if(mAudioManager == null || volume == percent) return;
+        volume = percent;
         double percentDouble = percent*1.0/100;
         percent = (int) (maxAudioVolume * percentDouble);
         try {
@@ -324,19 +419,34 @@ public class AudioPlayer implements OnActionReceiveListener, Player.Listener {
         } catch (Exception e){
             Log.e(TAG, "set music volume error", e);
         }
+        if(changedListener != null){
+            changedListener.onVolumeChanged(volume);
+        }
     }
 
-    private int getVolume(){
-        if(mAudioManager != null) {
-            return (int)(mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC)*100/maxAudioVolume);
-        }else {
-            return 100;
-        }
+    private int volume = 100;
+    public int getVolume(){
+        return volume;
+    }
+
+    public MusicItem getCurrentMusic(){
+        if(mMusicPlayRequest != null) return mMusicPlayRequest.getMusic();
+        return null;
+    }
+
+    public String getUrl(){
+        return url;
     }
 
     private int getProgress(){
         if(duration == 0) return 0;
         return position * 1000 / duration;
+    }
+
+    public void getPosition(){
+        handler.post(() -> {
+            if(changedListener != null) changedListener.onPositionChanged(mediaPlayer.getCurrentPosition());
+        });
     }
 
     @SuppressLint("DefaultLocale")

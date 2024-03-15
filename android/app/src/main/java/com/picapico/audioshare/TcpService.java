@@ -37,7 +37,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Timer;
@@ -72,7 +72,7 @@ public class TcpService extends NotificationService {
         new Thread(this::startLocalServer).start();
         new Thread(this::startServer).start();
         this.startHttpServer();
-        startBroadcastTimer();
+        this.startBroadcastTimer();
     }
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -226,7 +226,7 @@ public class TcpService extends NotificationService {
     }
 
     private void startLocalServer(){
-        Log.i(TAG, "prepare start server");
+        Log.i(TAG, "prepare start local server");
         try {
             localServerSocket = new LocalServerSocket(HEAD);
             while (localServerSocket != null){
@@ -259,9 +259,10 @@ public class TcpService extends NotificationService {
         }
     }
     private void startHttpServer(){
+        Log.i(TAG, "prepare http start server");
         int port = NetworkUtils.getFreePort(8080);
         this.setHttpPort(port);
-        httpServer = new HttpServer(getApplicationContext(), port);
+        httpServer = new HttpServer(getApplicationContext(), port).start();
         httpServer.getAudioPlayer().setMediaMetaChangedListener(new AudioPlayer.MediaMetaChangedListener() {
             @Override
             public void onMediaMetaChanged(boolean playing, int position) {
@@ -278,7 +279,7 @@ public class TcpService extends NotificationService {
         httpServer.setAssetManager(getAssets());
     }
     private void startServer(){
-        Log.i(TAG, "prepare start server");
+        Log.i(TAG, "prepare tcp start server");
         try {
             int port = NetworkUtils.getFreePort();
             serverSocket = new ServerSocket(port);
@@ -550,18 +551,15 @@ public class TcpService extends NotificationService {
                 }
                 try (DatagramSocket socket = new DatagramSocket(0)) {
                     socket.setBroadcast(true);
-                    InetAddress broadcastAddress = InetAddress.getByName(NetworkUtils.BROADCAST_ADDRESS);
-                    String message = HEAD + "@" + getListenPort();
+                    String message = HEAD + "@" + getListenPort() + "@" + getHttpPort();
                     byte[] data = message.getBytes();
                     for (int i = 58261; i < 58271; i++) {
-                        DatagramPacket packet = new DatagramPacket(
-                                data, data.length, broadcastAddress, i);
-                        socket.send(packet);
+                        socket.send(new DatagramPacket(data, data.length,
+                                new InetSocketAddress(NetworkUtils.BROADCAST_ADDRESS, i)));
                     }
                     Log.i(TAG, "send broadcast " + socket.getLocalPort());
                 } catch (Exception e) {
-                    Log.e(TAG, "send broadcast error");
-                    e.printStackTrace();
+                    Log.e(TAG, "send broadcast error ", e);
                 }
             }
         }, 0, 1000L * 10);

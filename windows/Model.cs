@@ -82,8 +82,9 @@ namespace AudioShare
                 UdpReceiveResult result = await _udpListener.ReceiveAsync();
                 if (result.Buffer.Length > 26) continue;
                 string message = Encoding.UTF8.GetString(result.Buffer);
+                Logger.Info("Received message " + result.RemoteEndPoint.Address.ToString());
                 var messages = message.Split('@');
-                if (messages.Length != 2 || messages[0] != "picapico-audio-share") continue;
+                if (messages.Length < 2 || messages[0] != "picapico-audio-share") continue;
                 if (int.TryParse(messages[1], out int port) && port > 0 && port < 65535)
                 {
                     _dispatcher.Invoke(() =>

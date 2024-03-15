@@ -1,5 +1,6 @@
 package com.picapico.audioshare;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.ComponentName;
 import android.content.Context;
@@ -22,6 +23,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -46,7 +48,7 @@ public class MainActivity extends AppCompatActivity {
         public void onServiceConnected(ComponentName className, IBinder service) {
             TcpService.TcpBinder binder = (TcpService.TcpBinder) service;
             tcpService = binder.getService();
-            tcpService.setAudioManager((AudioManager)getSystemService(Context.AUDIO_SERVICE));
+            tcpService.setAudioManager((AudioManager) getSystemService(Context.AUDIO_SERVICE));
             tcpService.setVersionName(versionName);
             tcpService.setMessageListener(messageListener);
             isBound = true;
@@ -75,6 +77,11 @@ public class MainActivity extends AppCompatActivity {
         bindService(intent, connection, Context.BIND_AUTO_CREATE);
         manager.setOnClickListener(this::onManagerClick);
         findViewById(R.id.imageView).setOnClickListener(this::onManagerClick);
+        ActivityCompat.requestPermissions(this, new String[]{
+                Manifest.permission.INTERNET,
+                Manifest.permission.ACCESS_NETWORK_STATE,
+                Manifest.permission.ACCESS_WIFI_STATE
+        }, 1);
     }
 
     private void onManagerClick(View e){

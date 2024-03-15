@@ -22,31 +22,42 @@ public class HttpProxy {
         handle(proxyRequestData, listener);
     }
     public static void handle(ProxyRequestData requestData, OnCompletedListener listener){
-        AsyncHttpRequest requestProxy = new AsyncHttpRequest(Uri.parse(requestData.getUrl()), requestData.getMethod());
-        requestProxy.setFollowRedirect(requestData.isAllowAutoRedirect());
+        handle(requestData, listener, true);
+    }
+    private static AsyncHttpRequest getRequest(ProxyRequestData requestData){
+        AsyncHttpRequest request = new AsyncHttpRequest(Uri.parse(requestData.getUrl()), requestData.getMethod());
+        request.setFollowRedirect(requestData.isAllowAutoRedirect());
         boolean userAgentSet = false;
         for (String key: requestData.getHeaders().keySet()) {
             switch (key.toLowerCase().replaceAll("-", "")){
                 case "useragent":
                     userAgentSet = true;
-                    requestProxy.setHeader("User-Agent", requestData.getHeaders().get(key));
+                    request.setHeader("User-Agent", requestData.getHeaders().get(key));
                     break;
-                case "contenttype": requestProxy.setHeader("Content-Type", requestData.getHeaders().get(key));break;
-                default: requestProxy.setHeader(key, requestData.getHeaders().get(key));
+                case "contenttype": request.setHeader("Content-Type", requestData.getHeaders().get(key));break;
+                default: request.setHeader(key, requestData.getHeaders().get(key));
             }
 
         }
-        if(!userAgentSet) requestProxy.setHeader("User-Agent", UserAgent);
+        if(!userAgentSet) request.setHeader("User-Agent", UserAgent);
         if(requestData.hasBody()){
-            requestProxy.setBody(new StringBody(requestData.getData()));
+            request.setBody(new StringBody(requestData.getData()));
         }
-        AsyncHttpClient.getDefaultInstance().executeByteBufferList(requestProxy, new AsyncHttpClient.DownloadCallback() {
+        return request;
+    }
+    public static void handle(ProxyRequestData requestData, OnCompletedListener listener, boolean retry){
+        AsyncHttpRequest request = getRequest(requestData);
+        AsyncHttpClient.getDefaultInstance().executeByteBufferList(request, new AsyncHttpClient.DownloadCallback() {
             @Override
             public void onCompleted(Exception e, AsyncHttpResponse source, ByteBufferList result) {
-                if(e != null){
-                    Log.e(TAG, "send proxy post error", e);
+                if(e != null && retry){
+                    handle(requestData, listener, false);
+                }else {
+                    if(e != null){
+                        Log.e(TAG, requestData.getMethod().toLowerCase() + " proxy send error", e);
+                    }
+                    listener.onCompleted(source, result);
                 }
-                listener.onCompleted(source, result);
             }
         });
     }

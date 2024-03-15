@@ -134,7 +134,6 @@ public class NetworkUtils {
                     while (addresses.hasMoreElements()) {
                         InetAddress element = addresses.nextElement();
                         if(element.isLinkLocalAddress()) continue;
-                        Log.i(TAG, String.format("name: %s, loopback: %b, up: %b, linkLocal: %b, address: %s", name, isLoopback, isUp, element.isLinkLocalAddress(), element.toString()));
                         localAddresses.add(element);
                     }
                 } catch (SocketException e) {

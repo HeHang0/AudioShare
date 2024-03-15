@@ -46,7 +46,7 @@ public class NotificationService extends Service {
     private PendingIntent mPendingPlay;
     private PendingIntent mPendingPrevious;
     private PendingIntent mPendingNext;
-    private PendingIntent mPendingLover;
+//    private PendingIntent mPendingLover;
     private androidx.core.app.NotificationCompat.Builder mNotificationBuilder;
     private MediaSessionCompat mMediaSession ;
     private Notification mNotification ;
@@ -103,14 +103,14 @@ public class NotificationService extends Service {
         mPendingNext = PendingIntent.getBroadcast(this, 3, nextIntent, PendingIntent.FLAG_IMMUTABLE);
         Intent loverIntent = new Intent(this, NotificationReceiver.class);
         loverIntent.setAction(NotificationActions.ACTION_LOVER);
-        mPendingLover = PendingIntent.getBroadcast(this, 4, loverIntent, PendingIntent.FLAG_IMMUTABLE);
+//        mPendingLover = PendingIntent.getBroadcast(this, 4, loverIntent, PendingIntent.FLAG_IMMUTABLE);
         mNotificationBuilder  = new androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
                 .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
                         .setShowActionsInCompactView(0, 1, 2, 3)
                         .setShowCancelButton(false)
                         .setMediaSession(mMediaSession.getSessionToken()))
                 .setContentIntent(pendingInfo)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.logo)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setPriority(NotificationCompat.PRIORITY_MAX);
     }
@@ -130,7 +130,7 @@ public class NotificationService extends Service {
             iconPlayPause = R.drawable.pause;
             titlePlayPause = "play";
         }
-        int iconLover = lover ? R.drawable.lover_on : R.drawable.lover_off;
+//        int iconLover = lover ? R.drawable.lover_on : R.drawable.lover_off;
 
         mNotificationBuilder.clearActions();
         mNotification = mNotificationBuilder
@@ -141,8 +141,13 @@ public class NotificationService extends Service {
                 .addAction(R.drawable.last, "prev", mPendingPrevious)
                 .addAction(iconPlayPause, titlePlayPause, mPendingPlay)
                 .addAction(R.drawable.next, "next", mPendingNext)
-                .addAction(iconLover, "lover", mPendingLover).build();
-        startForeground(NOTIFICATION_ID, mNotification);
+//                .addAction(iconLover, "lover", mPendingLover)
+                .build();
+        try {
+            startForeground(NOTIFICATION_ID, mNotification);
+        }catch (Exception ignore){
+
+        }
         if(!playing) {
             stopForeground(false);
         }

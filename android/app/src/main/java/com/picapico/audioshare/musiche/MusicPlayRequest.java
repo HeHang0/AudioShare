@@ -13,7 +13,7 @@ public class MusicPlayRequest {
     private static final String TAG = "AudioShareMusicPlayReq";
     private MusicItem music;
     private int index = 0;
-    private final List<MusicItem> playlist = new ArrayList<>();
+    private List<MusicItem> playlist = new ArrayList<>();
 
     public static MusicPlayRequest of(JSONObject jsonObject){
         MusicPlayRequest musicPlayRequest = new MusicPlayRequest();
@@ -57,6 +57,10 @@ public class MusicPlayRequest {
 
     public List<MusicItem> getPlaylist() {
         return playlist;
+    }
+
+    public void setPlaylist(List<MusicItem> list) {
+        this.playlist = list;
     }
 
     public int getIndex() {

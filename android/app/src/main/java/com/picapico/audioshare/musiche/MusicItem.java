@@ -44,6 +44,22 @@ public class MusicItem {
     private String csrf = "";
     private String type;
 
+    public Map<String, Object> toMap(){
+        Map<String, Object> data = new HashMap<>();
+        if(id != null) data.put("id", id);
+        if(name != null) data.put("name", name);
+        if(image != null) data.put("image", image);
+        if(singer != null) data.put("singer", singer);
+        if(album != null) data.put("album", album);
+        if(remark != null) data.put("remark", remark);
+        if(cookie != null) data.put("cookie", cookie);
+        if(musicU != null) data.put("musicU", musicU);
+        if(uid != null) data.put("uid", uid);
+        if(csrf != null) data.put("csrf", csrf);
+        if(type != null) data.put("type", type);
+        return data;
+    }
+
     public interface onUrlLoadedCallback {
         void onUrlLoaded(String url);
     }
@@ -108,7 +124,7 @@ public class MusicItem {
     private static int now(){
         return (int) (System.currentTimeMillis()/1000);
     }
-    private void getQQMusicUrl(Quality quality, onUrlLoadedCallback callback, boolean audition){
+    private void getQQMusicUrl(Quality ignore, onUrlLoadedCallback callback, boolean audition){
         String fileName = "";
         if(audition && remark != null && !remark.isEmpty()){
             fileName = "\"" + remark + "\"";
@@ -157,7 +173,7 @@ public class MusicItem {
                         Log.e(TAG, "get qq music url error", ex);
                     }
                     if(musicUrl == null && !audition){
-                        getQQMusicUrl(quality, callback, true);
+                        getQQMusicUrl(ignore, callback, true);
                     }else {
                         callback.onUrlLoaded(musicUrl);
                     }
@@ -252,25 +268,38 @@ public class MusicItem {
                 musicItem.setType(jsonObject.getString("type"));
             }
             if(jsonObject.has("cookie")){
-                if("cloud".equals(musicItem.getType())){
-                    JSONObject typeObj = jsonObject.getJSONObject("cookie");
-                    if(typeObj.has("__csrf")){
-                        musicItem.setCsrf(typeObj.getString("__csrf"));
+                try{
+                    if("cloud".equals(musicItem.getType())){
+                        JSONObject typeObj = jsonObject.getJSONObject("cookie");
+                        if(typeObj.has("__csrf")){
+                            musicItem.setCsrf(typeObj.getString("__csrf"));
+                        }
+                        if(typeObj.has("MUSIC_U")){
+                            musicItem.setMusicU(typeObj.getString("MUSIC_U"));
+                        }
+                    }else if("migu".equals(musicItem.getType())) {
+                        JSONObject typeObj = jsonObject.getJSONObject("cookie");
+                        if(typeObj.has("cookie")){
+                            musicItem.setCookie(typeObj.getString("cookie"));
+                        }
+                        if(typeObj.has("uid")){
+                            musicItem.setUid(typeObj.getString("uid"));
+                        }
+                    }else {
+                        musicItem.setCookie(jsonObject.getString("cookie"));
                     }
-                    if(typeObj.has("MUSIC_U")){
-                        musicItem.setMusicU(typeObj.getString("MUSIC_U"));
-                    }
-                }else if("migu".equals(musicItem.getType())) {
-                    JSONObject typeObj = jsonObject.getJSONObject("cookie");
-                    if(typeObj.has("cookie")){
-                        musicItem.setCookie(typeObj.getString("cookie"));
-                    }
-                    if(typeObj.has("uid")){
-                        musicItem.setUid(typeObj.getString("uid"));
-                    }
-                }else {
+                }catch (Exception ignore){
                     musicItem.setCookie(jsonObject.getString("cookie"));
                 }
+            }
+            if(jsonObject.has("__csrf")){
+                musicItem.setCsrf(jsonObject.getString("__csrf"));
+            }
+            if(jsonObject.has("MUSIC_U")){
+                musicItem.setMusicU(jsonObject.getString("MUSIC_U"));
+            }
+            if(jsonObject.has("uid")){
+                musicItem.setUid(jsonObject.getString("uid"));
             }
         } catch (Exception e) {
             Log.e(TAG, "parse music item error", e);
