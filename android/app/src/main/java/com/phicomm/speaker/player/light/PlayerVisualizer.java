@@ -13,7 +13,10 @@ public class PlayerVisualizer implements Visualizer.OnDataCaptureListener {
 
     private Visualizer mVisualizer;
     private final int audioSessionId;
-    public PlayerVisualizer(int sessionId){
+    private PlayerVisualizer(){
+        this(0);
+    }
+    private PlayerVisualizer(int sessionId){
         audioSessionId = sessionId;
         if(!LedLight.getEnabled()) {
             LedLight.setOnLoadSuccessListener(this::initVisualizer);
@@ -21,24 +24,55 @@ public class PlayerVisualizer implements Visualizer.OnDataCaptureListener {
         }
         initVisualizer();
     }
+    private static int startCount = 0;
+    private static PlayerVisualizer instance = null;
+    private static final Object mStateLock = new Object();
+    public static void start(){
+        Log.i(TAG, "ready to start visualizer");
+        if(!LedLight.supported()) {
+            Log.w(TAG, "not support visualizer");
+            return;
+        }
+        synchronized (mStateLock) {
+            startCount++;
+            if(instance != null) return;
+            instance = new PlayerVisualizer();
+        }
+    }
+
+    public static void stop(){
+        Log.i(TAG, "ready to stop visualizer");
+        if(!LedLight.supported()) return;
+        synchronized (mStateLock) {
+            if(--startCount > 0){
+                return;
+            }
+            if (instance != null) {
+                instance.release();
+            }
+            instance = null;
+        }
+    }
 
     private void initVisualizer(){
         try {
-            this.mVisualizer = new Visualizer(audioSessionId);
+            this.mVisualizer = new Visualizer(this.audioSessionId);
             this.mVisualizer.setCaptureSize(Visualizer.getCaptureSizeRange()[1]);
             this.mVisualizer.setScalingMode(0);
             this.mVisualizer.setDataCaptureListener(this, Visualizer.getMaxCaptureRate(), false, true);
             this.mVisualizer.setEnabled(true);
+            Log.e(TAG, "initialize visualizer");
         }catch (Exception e){
             Log.e(TAG, "initialize visualizer error");
             e.printStackTrace();
         }
     }
 
-    public void stop(){
+    private void release(){
         if (this.mVisualizer != null) {
             this.mVisualizer.release();
         }
+        this.mVisualizer = null;
         LedLight.setColor(32767L, 0);
     }
 

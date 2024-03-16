@@ -18,6 +18,7 @@ import com.koushikdutta.async.http.server.AsyncHttpServer;
 import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
 import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
 import com.koushikdutta.async.http.server.HttpServerRequestCallback;
+import com.picapico.audioshare.musiche.player.AudioPlayer;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -77,7 +78,12 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
         if(marketingName == null || marketingName.isEmpty()){
             String manufacturer = Build.MANUFACTURER;
             String model = Build.MODEL;
-            marketingName =manufacturer + " " + model;
+            if(manufacturer == null || manufacturer.isEmpty() ||
+                    "unknown".equalsIgnoreCase(manufacturer)){
+                marketingName = model;
+            }else {
+                marketingName = manufacturer + " " + model;
+            }
         }
         mDeviceName = marketingName;
     }
@@ -109,6 +115,9 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
             Log.e(TAG, "stop server error");
         }
         mServer = null;
+    }
+    public void pause(){
+        if(mAudioPlayer != null) mAudioPlayer.pause();
     }
     public static String getMarketingName() {
         try {

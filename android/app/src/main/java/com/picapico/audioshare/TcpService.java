@@ -26,7 +26,7 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
 import com.phicomm.speaker.player.light.PlayerVisualizer;
-import com.picapico.audioshare.musiche.AudioPlayer;
+import com.picapico.audioshare.musiche.player.AudioPlayer;
 import com.picapico.audioshare.musiche.HttpServer;
 import com.picapico.audioshare.musiche.notification.NotificationService;
 
@@ -263,7 +263,7 @@ public class TcpService extends NotificationService {
         int port = NetworkUtils.getFreePort(8080);
         this.setHttpPort(port);
         httpServer = new HttpServer(getApplicationContext(), port).start();
-        httpServer.getAudioPlayer().setMediaMetaChangedListener(new AudioPlayer.MediaMetaChangedListener() {
+        httpServer.getAudioPlayer().setMediaMetaChangedListener(new AudioPlayer.OnMediaMetaChangedListener() {
             @Override
             public void onMediaMetaChanged(boolean playing, int position) {
                 setMetaData(playing, position);
@@ -376,7 +376,6 @@ public class TcpService extends NotificationService {
         if(mListener != null){
             mListener.onMessage();
         }
-        PlayerVisualizer playerVisualizer = null;
         try {
             initNotification();
             mWakeLockManager.acquireWakeLock();
@@ -402,7 +401,8 @@ public class TcpService extends NotificationService {
             byte[] buffer = new byte[bufferSizeInBytes];
             int dataLength;
             mAudioTrack.play();
-            playerVisualizer = new PlayerVisualizer(mAudioTrack.getAudioSessionId());
+            httpServer.pause();
+            PlayerVisualizer.start();
             Log.i(TAG, "play audio ready to read");
             outputStream.write(new byte[1]);
             outputStream.flush();
@@ -440,9 +440,7 @@ public class TcpService extends NotificationService {
             Log.e(TAG, "play audio error: " + e);
             e.printStackTrace();
         } finally {
-            if(playerVisualizer != null) {
-                playerVisualizer.stop();
-            }
+            PlayerVisualizer.stop();
             try {
                 inputStream.close();
             } catch (Exception e) {

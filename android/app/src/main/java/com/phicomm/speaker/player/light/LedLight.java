@@ -20,6 +20,10 @@ public class LedLight {
         return enabled;
     }
 
+    public static boolean supported(){
+        return Build.MANUFACTURER.equalsIgnoreCase("phicomm");
+    }
+
     public static synchronized void setEnable(boolean enabled){
         LedLight.enabled = enabled;
     }

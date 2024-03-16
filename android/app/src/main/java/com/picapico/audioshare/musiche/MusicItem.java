@@ -25,7 +25,7 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class MusicItem {
-    enum Quality {
+    public enum Quality {
         PQ, SQ, HQ, ZQ
     }
     private static final String TAG = "AudioShareMusicItem";
