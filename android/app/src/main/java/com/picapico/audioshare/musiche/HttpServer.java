@@ -2,6 +2,7 @@ package com.picapico.audioshare.musiche;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.media.AudioManager;
@@ -18,6 +19,7 @@ import com.koushikdutta.async.http.server.AsyncHttpServer;
 import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
 import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
 import com.koushikdutta.async.http.server.HttpServerRequestCallback;
+import com.picapico.audioshare.BuildConfig;
 import com.picapico.audioshare.musiche.player.AudioPlayer;
 
 import org.json.JSONArray;
@@ -146,7 +148,7 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
     private boolean isPositionSynchronized = false;
     private boolean isPositionSynchronizing = false;
     private void onRemoteServerMessage(String message, String address){
-        Log.d(TAG, "receive remote server message: " + message);
+        if (BuildConfig.DEBUG) Log.d(TAG, "receive remote server message: " + message);
         RemoteMessage msg = RemoteMessage.of(message);
         if(msg == null) return;
         RemoteClient client = mRemoteClients.get(address);
@@ -303,6 +305,7 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
         mServer.post("/lyric", empty);
         mServer.post("/lyricline", empty);
         mServer.post("/hotkey", empty);
+        mServer.post("/hotkey", reboot);
         mServer.post("/proxy", proxyPost);
         mServer.get("/proxy", proxyGet);
         mServer.get("/remote/clients", getRemoteClients);
@@ -501,6 +504,17 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
         response.send("application/json", "{\"data\":true}");
     };
     private final HttpServerRequestCallback image = (request, response) -> response.send("");
+    private final HttpServerRequestCallback reboot = (request, response) -> {
+        Intent intent = mContext.getPackageManager()
+                .getLaunchIntentForPackage(mContext.getPackageName());
+        if(intent != null){
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            mContext.startActivity(intent);
+            response.send("application/json", "{\"data\":true}");
+        }else {
+            response.send("application/json", "{\"data\":false}");
+        }
+    };
     private final HttpServerRequestCallback getRemoteClients = (request, response) -> {
         List<Map<String, Object>> clients = new ArrayList<>();
         AsyncNetworkSocket socket = (AsyncNetworkSocket) request.getSocket();
@@ -682,7 +696,7 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
     }
     public void sendServerWSMessage(RemoteMessage message){
         String msg = message.toJson();
-        Log.d(TAG, "send remote server message: " + msg);
+        if (BuildConfig.DEBUG) Log.d(TAG, "send remote server message: " + msg);
         for (String key: mRemoteClients.keySet()) {
             try {
                 Objects.requireNonNull(mRemoteClients.get(key)).send(msg);

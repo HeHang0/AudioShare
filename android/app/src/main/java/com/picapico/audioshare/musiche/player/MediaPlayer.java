@@ -14,6 +14,8 @@ public class MediaPlayer implements IMediaPlayer {
     private final android.media.MediaPlayer mediaPlayer;
     private Listener mediaChangedListener;
     private boolean stopped = true;
+
+    private int seekMode;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable updateProgressAction;
     public MediaPlayer(){
@@ -30,6 +32,11 @@ public class MediaPlayer implements IMediaPlayer {
             mediaPlayer.setOnMediaTimeDiscontinuityListener(this::onMediaTimeDiscontinuity);
         }
         updateProgressAction = this::updateProgress;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            seekMode = android.media.MediaPlayer.SEEK_PREVIOUS_SYNC;
+        }else {
+            seekMode = 0;
+        }
     }
     @Override
     public void setMediaChangedListener(Listener listener){
@@ -81,7 +88,17 @@ public class MediaPlayer implements IMediaPlayer {
 
     @Override
     public void seekTo(int position) {
-        mediaPlayer.seekTo(position);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            mediaPlayer.seekTo(position, seekMode);
+        }else {
+            mediaPlayer.seekTo(position);
+        }
+    }
+    public void setSeekDiscontinuity(boolean discontinuity){
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            seekMode = discontinuity ? android.media.MediaPlayer.SEEK_NEXT_SYNC:
+                    android.media.MediaPlayer.SEEK_PREVIOUS_SYNC;
+        }
     }
 
     @Override

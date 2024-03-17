@@ -10,8 +10,8 @@ android {
         applicationId "com.picapico.audioshare"
         minSdk 21
         targetSdk 34
-        versionCode 174
-        versionName "1.7.4"
+        versionCode 175
+        versionName "1.7.5"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
@@ -36,6 +36,10 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     compileOptions {

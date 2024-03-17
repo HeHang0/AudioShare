@@ -16,6 +16,7 @@ import androidx.media3.common.Timeline;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.SeekParameters;
 
 public class ExoPlayer implements IMediaPlayer, Player.Listener {
     private static final String TAG = "AudioShareExoPlayer";
@@ -91,6 +92,12 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
     @Override
     public void seekTo(int position) {
         handler.post(() -> mediaPlayer.seekTo(position));
+    }
+
+    @OptIn(markerClass = UnstableApi.class) @Override
+    public void setSeekDiscontinuity(boolean discontinuity){
+        handler.post(() -> mediaPlayer.setSeekParameters(
+                discontinuity ? SeekParameters.NEXT_SYNC : SeekParameters.DEFAULT));
     }
 
     @Override

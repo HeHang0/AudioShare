@@ -22,6 +22,7 @@ public interface IMediaPlayer {
     void play();
     void play(String url);
     void pause();
+    void setSeekDiscontinuity(boolean discontinuity);
     void seekTo(int position);
     void setVolume(int volume);
     int getDuration();

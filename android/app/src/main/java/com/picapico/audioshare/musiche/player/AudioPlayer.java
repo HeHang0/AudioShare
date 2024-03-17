@@ -319,6 +319,7 @@ public class AudioPlayer implements OnActionReceiveListener, IMediaPlayer.Listen
             mMusicPlayRequest.setMusic(musicItem);
         }
         play(uri);
+        mediaPlayer.setSeekDiscontinuity(true);
         remote = true;
     }
     public void play(String uri){
@@ -327,6 +328,7 @@ public class AudioPlayer implements OnActionReceiveListener, IMediaPlayer.Listen
             pause();
             return;
         }
+        mediaPlayer.setSeekDiscontinuity(false);
         mediaPlayer.play(uri);
         this.url = uri;
         if(mAudioManager != null){
@@ -389,7 +391,7 @@ public class AudioPlayer implements OnActionReceiveListener, IMediaPlayer.Listen
     }
     public void setPosition(int pos){
         if(pos <= 0) return;
-        int posReal = pos + 10 + Math.min(50, Math.abs(playingChangedDelay*2));
+        int posReal = pos + 20 + Math.min(50, Math.abs(playingChangedDelay*2));
         if(posReal < mediaPlayer.getDuration() &&
                 posReal > mediaPlayer.getPosition() + 150) {
             mediaPlayer.seekTo(posReal);
