@@ -55,6 +55,12 @@ public class RemoteClient {
         }
     }
 
+    public void send(String message){
+        if(webSocket != null && channel != AudioPlayer.ChannelTypeNone) {
+            webSocket.send(message);
+        }
+    }
+
     private RemoteClient(){
 
     }

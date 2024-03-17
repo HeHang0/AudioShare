@@ -146,7 +146,7 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
     private boolean isPositionSynchronized = false;
     private boolean isPositionSynchronizing = false;
     private void onRemoteServerMessage(String message, String address){
-//        Log.d(TAG, "receive remote server message: " + message);
+        Log.d(TAG, "receive remote server message: " + message);
         RemoteMessage msg = RemoteMessage.of(message);
         if(msg == null) return;
         RemoteClient client = mRemoteClients.get(address);
@@ -155,7 +155,7 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
                 mAudioPlayer.getPosition();
                 break;
             case RemoteMessage.MessageTypePause:
-                mAudioPlayer.pause();
+                mAudioPlayer.pauseByRemote();
                 break;
             case RemoteMessage.MessageTypeInfo:
                 if(client != null){
@@ -208,7 +208,7 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
             }
             mRemoteClients.put(address, RemoteClient.of(webSocket, address).setChannel(
                     mPreferences.getInt("channel-"+address, AudioPlayer.ChannelTypeStereo)));
-            mBroadcastReceiver.stop();
+//            mBroadcastReceiver.stop();
             webSocket.setClosedCallback(e -> mRemoteClients.remove(address));
             webSocket.setStringCallback(s -> onRemoteServerMessage(s, address));
             webSocket.send(RemoteMessage
@@ -681,10 +681,11 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
         }
     }
     public void sendServerWSMessage(RemoteMessage message){
-//        Log.d(TAG, "send remote server message: " + message.toJson());
+        String msg = message.toJson();
+        Log.d(TAG, "send remote server message: " + msg);
         for (String key: mRemoteClients.keySet()) {
             try {
-                Objects.requireNonNull(mRemoteClients.get(key)).send(message);
+                Objects.requireNonNull(mRemoteClients.get(key)).send(msg);
             }catch (Exception e){
                 Log.e(TAG, "send websocket msg error", e);
             }

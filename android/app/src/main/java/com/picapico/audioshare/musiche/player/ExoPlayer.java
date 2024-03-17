@@ -6,14 +6,16 @@ import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.Timeline;
-
-import com.phicomm.speaker.player.light.PlayerVisualizer;
+import androidx.media3.common.Tracks;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
 
 public class ExoPlayer implements IMediaPlayer, Player.Listener {
     private static final String TAG = "AudioShareExoPlayer";
@@ -24,12 +26,17 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
     private boolean playing = false;
     private int position = 0;
     private int duration = 0;
-    public ExoPlayer(Context context){
+    @OptIn(markerClass = UnstableApi.class) public ExoPlayer(Context context){
         AudioAttributes audioAttributes = new AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
                 .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                 .build();
-        mediaPlayer = new androidx.media3.exoplayer.ExoPlayer.Builder(context).build();
+        androidx.media3.exoplayer.ExoPlayer.Builder builder =
+                new androidx.media3.exoplayer.ExoPlayer.Builder(context);
+        DefaultRenderersFactory factory = new DefaultRenderersFactory(context.getApplicationContext())
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
+        builder.setRenderersFactory(factory);
+        mediaPlayer = builder.build();
         mediaPlayer.setAudioAttributes(audioAttributes, true);
         mediaPlayer.addListener(this);
         mediaPlayer.setPlayWhenReady(true);
@@ -128,7 +135,7 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
         Log.i(TAG, "onPlayerStateChanged: " + playbackState);
         if(mediaChangedListener != null && playbackState == Player.STATE_ENDED){
             mediaChangedListener.onPlaybackStateChanged(Listener.STATE_ENDED);
-        }
+        }else if(playbackState == Player.STATE_READY) updateProgress();
     }
     @Override
     public void onDeviceVolumeChanged(int volume, boolean muted){
@@ -138,14 +145,8 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
     }
     @Override
     public void onIsPlayingChanged(boolean isPlaying) {
-        if(playing == isPlaying) return;
         playing = isPlaying;
-        if(playing) {
-            updateProgress();
-            PlayerVisualizer.start();
-        }else {
-            PlayerVisualizer.stop();
-        }
+        if(playing) updateProgress();
         if(mediaChangedListener != null){
             mediaChangedListener.onPlayingChanged(isPlaying);
         }
@@ -154,9 +155,18 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
     public void onPlayerError(@NonNull PlaybackException error) {
         Log.e(TAG, "onPlayerError: ", error);
     }
+    @Override
+    @SuppressWarnings("ReferenceEquality")
+    public void onTracksChanged(Tracks tracks) {
+        if (tracks.containsType(C.TRACK_TYPE_AUDIO)
+                && !tracks.isTypeSupported(C.TRACK_TYPE_AUDIO, /* allowExceedsCapabilities= */ true)) {
+            Log.w(TAG, "Media includes audio tracks, but none are playable by this device");
+        }
+    }
     private void updateProgress(){
         handler.removeCallbacks(updateProgressAction);
         position = (int) mediaPlayer.getCurrentPosition();
+        playing = mediaPlayer.isPlaying();
         if(mediaChangedListener != null){
             mediaChangedListener.onPositionChanged(playing, position, duration);
         }

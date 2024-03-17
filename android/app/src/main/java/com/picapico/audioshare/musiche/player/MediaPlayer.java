@@ -42,11 +42,18 @@ public class MediaPlayer implements IMediaPlayer {
         try {
             mediaPlayer.start();
             handler.post(this::updateProgress);
-            if(mediaChangedListener != null){
-                mediaChangedListener.onPlayingChanged(mediaPlayer.isPlaying());
-            }
+            onPlayingChanged();
         } catch (Exception e) {
             Log.e(TAG, "play error", e);
+        }
+    }
+
+    private boolean playing = false;
+    private void onPlayingChanged(){
+        if(playing == mediaPlayer.isPlaying()) return;
+        playing = mediaPlayer.isPlaying();
+        if(mediaChangedListener != null){
+            mediaChangedListener.onPlayingChanged(mediaPlayer.isPlaying());
         }
     }
 
@@ -68,6 +75,7 @@ public class MediaPlayer implements IMediaPlayer {
         try{
             if(!mediaPlayer.isPlaying()) return;
             mediaPlayer.pause();
+            onPlayingChanged();
         }catch (Exception ignore){}
     }
 
@@ -113,8 +121,8 @@ public class MediaPlayer implements IMediaPlayer {
         int position = mediaPlayer.getCurrentPosition();
         if(mediaChangedListener != null && duration > 1){
             mediaChangedListener.onDurationChanged(position, duration);
-            mediaChangedListener.onPlayingChanged(mediaPlayer.isPlaying());
         }
+        onPlayingChanged();
         handler.post(this::updateProgress);
     }
     public void onPlaybackStateCompleted(android.media.MediaPlayer mp) {
@@ -122,10 +130,12 @@ public class MediaPlayer implements IMediaPlayer {
         if(mediaChangedListener != null){
             mediaChangedListener.onPlaybackStateChanged(Listener.STATE_ENDED);
         }
+        onPlayingChanged();
         handler.post(this::updateProgress);
     }
     public boolean onPlayerError(android.media.MediaPlayer mp, int what, int extra) {
         Log.e(TAG, "onPlayerError: " + what + ", " + extra);
+        onPlayingChanged();
         return true;
     }
     private void updateProgress(){

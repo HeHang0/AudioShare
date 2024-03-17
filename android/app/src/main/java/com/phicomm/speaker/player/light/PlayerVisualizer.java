@@ -28,13 +28,13 @@ public class PlayerVisualizer implements Visualizer.OnDataCaptureListener {
     private static PlayerVisualizer instance = null;
     private static final Object mStateLock = new Object();
     public static void start(){
-        Log.i(TAG, "ready to start visualizer");
         if(!LedLight.supported()) {
-            Log.w(TAG, "not support visualizer");
             return;
         }
+        Log.i(TAG, "visualizer supported");
         synchronized (mStateLock) {
             startCount++;
+            PlayerVisualizer.updateTimeMillis();
             if(instance != null) return;
             instance = new PlayerVisualizer();
         }

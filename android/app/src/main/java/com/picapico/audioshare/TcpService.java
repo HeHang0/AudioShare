@@ -260,7 +260,7 @@ public class TcpService extends NotificationService {
     }
     private void startHttpServer(){
         Log.i(TAG, "prepare http start server");
-        int port = NetworkUtils.getFreePort(8080);
+        int port = NetworkUtils.getFreePort(Build.MANUFACTURER.equalsIgnoreCase("phicomm") ? 8090 : 8080);
         this.setHttpPort(port);
         httpServer = new HttpServer(getApplicationContext(), port).start();
         httpServer.getAudioPlayer().setMediaMetaChangedListener(new AudioPlayer.OnMediaMetaChangedListener() {

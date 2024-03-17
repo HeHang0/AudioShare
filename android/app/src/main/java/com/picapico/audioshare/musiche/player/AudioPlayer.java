@@ -3,11 +3,11 @@ package com.picapico.audioshare.musiche.player;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.media.AudioManager;
-import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.IntDef;
 
+import com.phicomm.speaker.player.light.PlayerVisualizer;
 import com.picapico.audioshare.musiche.MusicItem;
 import com.picapico.audioshare.musiche.MusicPlayRequest;
 import com.picapico.audioshare.musiche.notification.NotificationActions;
@@ -73,7 +73,7 @@ public class AudioPlayer implements OnActionReceiveListener, IMediaPlayer.Listen
     private String url = "";
     //endregion
     public AudioPlayer(Context context){
-        mediaPlayer = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? new ExoPlayer(context) : new MediaPlayer();
+        mediaPlayer = new ExoPlayer(context);
         mediaPlayer.setMediaChangedListener(this);
         mNotificationCallback = new NotificationCallback();
         mNotificationCallback.setOnActionReceiveListener(this);
@@ -168,11 +168,18 @@ public class AudioPlayer implements OnActionReceiveListener, IMediaPlayer.Listen
         }
     }
 
+    private long lastSendTime = 0;
     @Override
     public void onPositionChanged(boolean playing, int position, int duration) {
         updateMediaMetadataPosition();
         if(changedListener != null){
             changedListener.onPositionChanged();
+            if(!remote) return;
+            long now = System.currentTimeMillis();
+            if(now - lastSendTime > 1500) {
+                changedListener.onPlaying(true, null, null, 0);
+                lastSendTime = now;
+            }
         }
     }
     @Override
@@ -193,11 +200,12 @@ public class AudioPlayer implements OnActionReceiveListener, IMediaPlayer.Listen
         if(playing){
             stopped = false;
             playingChangedDelay = (int) (System.currentTimeMillis() - lastStatusTime);
+            PlayerVisualizer.start();
         }else {
             lastStatusTime = System.currentTimeMillis();
+            PlayerVisualizer.stop();
         }
         if(changedListener != null){
-            changedListener.onPositionChanged();
             if(playing && mMusicPlayRequest != null && url != null && !url.isEmpty()) {
                 changedListener.onPlaying(remote, url, mMusicPlayRequest.getMusic(), volume);
             }
@@ -368,6 +376,9 @@ public class AudioPlayer implements OnActionReceiveListener, IMediaPlayer.Listen
         if(changedListener != null){
             changedListener.onPaused();
         }
+    }
+    public void pauseByRemote(){
+        mediaPlayer.pause();
     }
     public void setProgress(int percent){
         double percentDouble = percent*1.0/1000;

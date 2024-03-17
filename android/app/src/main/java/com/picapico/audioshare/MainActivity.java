@@ -150,7 +150,11 @@ public class MainActivity extends AppCompatActivity {
             }
             ipAddress.setText(sb.toString().trim());
             if(ipv4 == null || ipv4.isEmpty()) ipv4 = "127.0.0.1";
-            manager.setText("http://" + ipv4 + ":" + httpPort);
+            String httpAddress = "http://" + ipv4;
+            if(httpPort != 80){
+                httpAddress += ":" + httpPort;
+            }
+            manager.setText(httpAddress);
         });
     }
 
