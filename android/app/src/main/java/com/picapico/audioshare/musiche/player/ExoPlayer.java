@@ -23,6 +23,7 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
     private final androidx.media3.exoplayer.ExoPlayer mediaPlayer;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable updateProgressAction;
+    private final int sessionId;
     private Listener mediaChangedListener;
     private boolean playing = false;
     private int position = 0;
@@ -41,6 +42,7 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
         mediaPlayer.setAudioAttributes(audioAttributes, true);
         mediaPlayer.addListener(this);
         mediaPlayer.setPlayWhenReady(true);
+        sessionId = mediaPlayer.getAudioSessionId();
         updateProgressAction = this::updateProgress;
     }
 
@@ -50,11 +52,11 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
 
     @Override
     public void play() {
-        if(playing) return;
+        if(isPlaying()) return;
         handler.post(() -> {
             try {
                 mediaPlayer.play();
-                playing = true;
+                setPlaying(true);
             } catch (Exception e) {
                 Log.e(TAG, "play error", e);
             }
@@ -70,7 +72,7 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
                 mediaPlayer.setMediaItem(MediaItem.fromUri(url));
                 mediaPlayer.prepare();
                 mediaPlayer.play();
-                playing = true;
+                setPlaying(true);
             } catch (Exception e) {
                 pause();
                 Log.e(TAG, "play url error," + url, e);
@@ -80,7 +82,7 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
 
     @Override
     public void pause() {
-        playing = false;
+        setPlaying(false);
         handler.post(() -> {
             try{
                 if(!mediaPlayer.isPlaying()) return;
@@ -115,6 +117,11 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
         return position;
     }
 
+    @OptIn(markerClass = UnstableApi.class) @Override
+    public int getAudioSessionId() {
+        return sessionId;
+    }
+
     @Override
     public void getRealtimePosition(RealtimePositionCallback callback) {
         handler.post(() -> {
@@ -124,8 +131,11 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
     }
 
     @Override
-    public boolean isPlaying() {
+    public synchronized boolean isPlaying() {
         return playing;
+    }
+    private synchronized void setPlaying(boolean playing) {
+        this.playing = playing;
     }
 
     //region ExoPlayer listener
@@ -145,15 +155,9 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
         }else if(playbackState == Player.STATE_READY) updateProgress();
     }
     @Override
-    public void onDeviceVolumeChanged(int volume, boolean muted){
-        if(mediaChangedListener != null){
-            mediaChangedListener.onDeviceVolumeChanged(muted ? 0 : volume);
-        }
-    }
-    @Override
     public void onIsPlayingChanged(boolean isPlaying) {
-        playing = isPlaying;
-        if(playing) updateProgress();
+        setPlaying(isPlaying);
+        if(isPlaying) updateProgress();
         if(mediaChangedListener != null){
             mediaChangedListener.onPlayingChanged(isPlaying);
         }
@@ -173,11 +177,11 @@ public class ExoPlayer implements IMediaPlayer, Player.Listener {
     private void updateProgress(){
         handler.removeCallbacks(updateProgressAction);
         position = (int) mediaPlayer.getCurrentPosition();
-        playing = mediaPlayer.isPlaying();
+        setPlaying(mediaPlayer.isPlaying());
         if(mediaChangedListener != null){
-            mediaChangedListener.onPositionChanged(playing, position, duration);
+            mediaChangedListener.onPositionChanged(isPlaying(), position, duration);
         }
-        if(playing){
+        if(isPlaying()){
             handler.postDelayed(updateProgressAction, 500);
         }
     }

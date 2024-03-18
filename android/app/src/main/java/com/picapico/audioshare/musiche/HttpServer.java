@@ -19,6 +19,7 @@ import com.koushikdutta.async.http.server.AsyncHttpServer;
 import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
 import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
 import com.koushikdutta.async.http.server.HttpServerRequestCallback;
+import com.phicomm.speaker.player.light.PlayerVisualizer;
 import com.picapico.audioshare.BuildConfig;
 import com.picapico.audioshare.musiche.player.AudioPlayer;
 
@@ -118,9 +119,6 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
         }
         mServer = null;
     }
-    public void pause(){
-        if(mAudioPlayer != null) mAudioPlayer.pause();
-    }
     public static String getMarketingName() {
         try {
             @SuppressLint("PrivateApi") Class<?> systemPropertiesClass = Class.forName("android.os.SystemProperties");
@@ -173,6 +171,7 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
                 break;
             case RemoteMessage.MessageTypePlay:
                 isPositionSynchronized = false;
+                PlayerVisualizer.updateTimeMillis(-15);
                 mAudioPlayer.setVolume(msg.getVolume());
                 if(client != null && client.getChannel() == AudioPlayer.ChannelTypeNone){
                     client.setChannel(AudioPlayer.ChannelTypeStereo);
@@ -261,6 +260,7 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
                     .setUrl(url)
                     .setMusic(music)
                     .setVolume(volume);
+            PlayerVisualizer.updateTimeMillis();
         }
         sendServerWSMessage(message);
     }
@@ -554,6 +554,7 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
                             .setUrl(mAudioPlayer.getUrl())
                             .setMusic(mAudioPlayer.getCurrentMusic())
                             .setVolume(mAudioPlayer.getVolume()));
+                    PlayerVisualizer.updateTimeMillis();
                 }
             }
             mPreferences.edit().putInt("channel-"+localClient.getAddress(), localClient.getChannel()).apply();

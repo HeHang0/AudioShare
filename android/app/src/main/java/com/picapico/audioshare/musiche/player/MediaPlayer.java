@@ -14,8 +14,8 @@ public class MediaPlayer implements IMediaPlayer {
     private final android.media.MediaPlayer mediaPlayer;
     private Listener mediaChangedListener;
     private boolean stopped = true;
-
     private int seekMode;
+    private final int sessionId;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable updateProgressAction;
     public MediaPlayer(){
@@ -37,6 +37,7 @@ public class MediaPlayer implements IMediaPlayer {
         }else {
             seekMode = 0;
         }
+        sessionId = mediaPlayer.getAudioSessionId();
     }
     @Override
     public void setMediaChangedListener(Listener listener){
@@ -110,6 +111,9 @@ public class MediaPlayer implements IMediaPlayer {
     public int getDuration() {
         if(stopped) return 0;
         return mediaPlayer.getDuration();
+    }@Override
+    public int getAudioSessionId() {
+        return sessionId;
     }
 
     @Override

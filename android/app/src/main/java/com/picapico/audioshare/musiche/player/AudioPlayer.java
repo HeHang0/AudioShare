@@ -189,10 +189,6 @@ public class AudioPlayer implements OnActionReceiveListener, IMediaPlayer.Listen
             next();
         }
     }
-    @Override
-    public void onDeviceVolumeChanged(int volume){
-        this.setVolume(volume*100/maxAudioVolume);
-    }
     private int playingChangedDelay = 0;
     private long lastStatusTime = 0;
     @Override
@@ -200,7 +196,7 @@ public class AudioPlayer implements OnActionReceiveListener, IMediaPlayer.Listen
         if(playing){
             stopped = false;
             playingChangedDelay = (int) (System.currentTimeMillis() - lastStatusTime);
-            PlayerVisualizer.start();
+            PlayerVisualizer.start(mediaPlayer.getAudioSessionId());
         }else {
             lastStatusTime = System.currentTimeMillis();
             PlayerVisualizer.stop();

@@ -391,6 +391,7 @@ public class TcpService extends NotificationService {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 audioAttributes.setFlags(AudioAttributes.FLAG_LOW_LATENCY);
             }
+            httpServer.getAudioPlayer().pause();
             mAudioTrack = new AudioTrack(
                     audioAttributes.build(),
                     audioFormat,
@@ -401,8 +402,7 @@ public class TcpService extends NotificationService {
             byte[] buffer = new byte[bufferSizeInBytes];
             int dataLength;
             mAudioTrack.play();
-            httpServer.pause();
-            PlayerVisualizer.start();
+            PlayerVisualizer.startBase(mAudioTrack.getAudioSessionId());
             Log.i(TAG, "play audio ready to read");
             outputStream.write(new byte[1]);
             outputStream.flush();
@@ -428,6 +428,10 @@ public class TcpService extends NotificationService {
                     Log.w(TAG, "write audio busy");
                     continue;
                 }
+                if(httpServer.getAudioPlayer().isPlaying()) {
+                    Log.w(TAG, "write audio playing");
+                    continue;
+                }
                 byte[] finalBuffer = buffer;
                 int finalDataLength = dataLength;
                 setWriting(true);
@@ -440,7 +444,7 @@ public class TcpService extends NotificationService {
             Log.e(TAG, "play audio error: " + e);
             e.printStackTrace();
         } finally {
-            PlayerVisualizer.stop();
+            PlayerVisualizer.stopBase();
             try {
                 inputStream.close();
             } catch (Exception e) {

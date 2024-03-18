@@ -15,4 +15,5 @@
 local.properties
 .idea
 app/release
+app/debug
 app/src/main/assets

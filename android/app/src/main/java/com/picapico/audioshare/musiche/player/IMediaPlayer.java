@@ -13,10 +13,9 @@ public interface IMediaPlayer {
         void onPlayingChanged(boolean playing);
         void onPlaybackStateChanged(@State int playbackState);
         void onDurationChanged(int position, int duration);
-        void onDeviceVolumeChanged(int volume);
         void onPositionChanged(boolean playing, int position, int duration);
     }
-    public interface RealtimePositionCallback{
+    interface RealtimePositionCallback{
         void onPosition(int position);
     }
     void play();
@@ -25,6 +24,7 @@ public interface IMediaPlayer {
     void setSeekDiscontinuity(boolean discontinuity);
     void seekTo(int position);
     void setVolume(int volume);
+    int getAudioSessionId();
     int getDuration();
     int getPosition();
     boolean isPlaying();

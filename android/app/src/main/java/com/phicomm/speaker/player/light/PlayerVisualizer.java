@@ -13,9 +13,6 @@ public class PlayerVisualizer implements Visualizer.OnDataCaptureListener {
 
     private Visualizer mVisualizer;
     private final int audioSessionId;
-    private PlayerVisualizer(){
-        this(0);
-    }
     private PlayerVisualizer(int sessionId){
         audioSessionId = sessionId;
         if(!LedLight.getEnabled()) {
@@ -24,19 +21,34 @@ public class PlayerVisualizer implements Visualizer.OnDataCaptureListener {
         }
         initVisualizer();
     }
-    private static int startCount = 0;
     private static PlayerVisualizer instance = null;
     private static final Object mStateLock = new Object();
-    public static void start(){
-        if(!LedLight.supported()) {
-            return;
+    private static int baseAudioSessionId;
+    public static void startBase(int sessionId){
+        if(!LedLight.supported()) return;
+        synchronized (mStateLock) {
+            stopBase();
+            baseAudioSessionId = sessionId;
+            if(instance == null) instance = new PlayerVisualizer(sessionId);
         }
+    }
+    public static void stopBase(){
+        if(!LedLight.supported()) return;
+        synchronized (mStateLock) {
+            if(baseAudioSessionId > 0 && instance != null && instance.getAudioSessionId() == baseAudioSessionId){
+                instance.release();
+                instance = null;
+            }
+            baseAudioSessionId = 0;
+        }
+    }
+    public static void start(int sessionId){
+        if(!LedLight.supported()) return;
         Log.i(TAG, "visualizer supported");
         synchronized (mStateLock) {
-            startCount++;
-            PlayerVisualizer.updateTimeMillis();
-            if(instance != null) return;
-            instance = new PlayerVisualizer();
+            if(instance != null && sessionId == instance.getAudioSessionId()) return;
+            stop();
+            instance = new PlayerVisualizer(sessionId);
         }
     }
 
@@ -44,14 +56,13 @@ public class PlayerVisualizer implements Visualizer.OnDataCaptureListener {
         Log.i(TAG, "ready to stop visualizer");
         if(!LedLight.supported()) return;
         synchronized (mStateLock) {
-            if(--startCount > 0){
-                return;
-            }
-            if(startCount < 0) startCount = 0;
             if (instance != null) {
                 instance.release();
             }
             instance = null;
+            if(baseAudioSessionId > 0){
+                startBase(baseAudioSessionId);
+            }
         }
     }
 
@@ -75,6 +86,10 @@ public class PlayerVisualizer implements Visualizer.OnDataCaptureListener {
         }
         this.mVisualizer = null;
         LedLight.setColor(32767L, 0);
+    }
+
+    public int getAudioSessionId() {
+        return audioSessionId;
     }
 
     private float move5Avg(float paramFloat) {
@@ -114,8 +129,12 @@ public class PlayerVisualizer implements Visualizer.OnDataCaptureListener {
         mHue = ((float) (System.currentTimeMillis() - mTimeMillis) / 51) % 360;
     }
 
-    public static synchronized void updateTimeMillis(){
-        mTimeMillis = System.currentTimeMillis();
+    public static void updateTimeMillis(){
+        updateTimeMillis(0);
+    }
+
+    public static synchronized void updateTimeMillis(int delay){
+        mTimeMillis = System.currentTimeMillis() + delay;
     }
 
     @Override
