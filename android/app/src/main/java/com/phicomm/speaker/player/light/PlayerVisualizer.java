@@ -47,6 +47,7 @@ public class PlayerVisualizer implements Visualizer.OnDataCaptureListener {
             if(--startCount > 0){
                 return;
             }
+            if(startCount < 0) startCount = 0;
             if (instance != null) {
                 instance.release();
             }
