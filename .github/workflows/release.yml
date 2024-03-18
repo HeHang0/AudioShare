@@ -49,12 +49,24 @@ jobs:
           copy windows\bin\Release\net462\AudioShare.exe AudioShare.exe
           copy android\app\build\outputs\apk\release\app-release.apk AudioShare.apk
           copy windows\bin\Publish\net6.0-windows\AudioShare.exe AudioShare.net6.exe
+          $prevErrorActionPreference = $ErrorActionPreference
+          $ErrorActionPreference = "SilentlyContinue"
+          Invoke-WebRequest -Uri "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" -OutFile platform-tools.zip
+          Expand-Archive -Path .\platform-tools.zip -DestinationPath .
+          copy .\platform-tools\adb.exe adb.exe
+          copy .\platform-tools\AdbWinApi.dll AdbWinApi.dll
+          copy .\platform-tools\AdbWinUsbApi.dll AdbWinUsbApi.dll
+          $ErrorActionPreference = $prevErrorActionPreference
 
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          fail_on_unmatched_files: false
           files: |
             AudioShare.apk
             AudioShare.exe
             AudioShare.net6.exe
+            adb.exe
+            AdbWinApi.dll
+            AdbWinUsbApi.dll
