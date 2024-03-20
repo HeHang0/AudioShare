@@ -24,7 +24,6 @@ import com.picapico.audioshare.BuildConfig;
 import com.picapico.audioshare.musiche.player.AudioPlayer;
 
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -278,7 +277,9 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
         mServer.post("/version", getVersion);
         mServer.get("/config", config);
         mServer.post("/config", config);
+        mServer.get("/storages", getStorages);
         mServer.get("/storage", getStorage);
+        mServer.addAction("DELETE", "/storage", deleteStorage);
         mServer.post("/storage", setStorage);
         mServer.post("/title", empty);
         mServer.post("/media", empty);
@@ -305,7 +306,11 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
         mServer.post("/lyric", empty);
         mServer.post("/lyricline", empty);
         mServer.post("/hotkey", empty);
-        mServer.post("/hotkey", reboot);
+        mServer.post("/reboot", reboot);
+        mServer.post("/file/select", selectFile);
+        mServer.post("/file/exists", existsFile);
+        mServer.post("/file/list/audio", getAllAudio);
+        mServer.post("/file/directory/music", getMusicDirectory);
         mServer.post("/proxy", proxyPost);
         mServer.get("/proxy", proxyGet);
         mServer.get("/remote/clients", getRemoteClients);
@@ -383,13 +388,33 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
         return "text/html";
     }
     private final HttpServerRequestCallback config = (request, response) -> {
-        JSONObject jsonObject = new JSONObject();
-        try {
-            jsonObject.put("remote", true);
-        } catch (JSONException e) {
-            Log.e(TAG, "set config item error", e);
+        Map<String, Boolean> data = new HashMap<>();
+        data.put("remote", true);
+        data.put("storage", true);
+        data.put("file", false);
+        data.put("list", true);
+        data.put("client", true);
+        data.put("lyric", true);
+        data.put("shortcut", false);
+        data.put("gpu", false);
+        response.send(new JSONObject(data));
+    };
+    private final HttpServerRequestCallback getStorages = (request, response) -> {
+        if(mPreferences == null){
+            response.end();
+            return;
         }
-        response.send(jsonObject);
+        Map<String, ?> values = mPreferences.getAll();
+        response.send(new JSONObject(values));
+    };
+    private final HttpServerRequestCallback deleteStorage = (request, response) -> {
+        String key = request.getQuery().getString("key");
+        if(mPreferences != null && key != null && !key.isEmpty()){
+            mPreferences.edit().remove(key).apply();
+            response.send("application/json", "{\"data\":true}");
+        }else {
+            response.end();
+        }
     };
     private final HttpServerRequestCallback getStorage = (request, response) -> {
         String key = request.getQuery().getString("key");
@@ -563,6 +588,28 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
             response.send("application/json", "{\"data\":false}");
         }
         response.end();
+    };
+    //selectFile getAllAudio getMusicDirectory
+
+    private final HttpServerRequestCallback selectFile = (request, response) -> {
+        Map<String, Object> result = new HashMap<>();
+        result.put("data", new String[]{});
+        response.send(new JSONObject(result));
+    };
+    private final HttpServerRequestCallback existsFile = (request, response) -> {
+        Map<String, Object> result = new HashMap<>();
+        result.put("data", false);
+        response.send(new JSONObject(result));
+    };
+    private final HttpServerRequestCallback getAllAudio = (request, response) -> {
+        Map<String, Object> result = new HashMap<>();
+        result.put("data", "");
+        response.send(new JSONObject(result));
+    };
+    private final HttpServerRequestCallback getMusicDirectory = (request, response) -> {
+        Map<String, Object> result = new HashMap<>();
+        result.put("data", "");
+        response.send(new JSONObject(result));
     };
 
     //region proxy
