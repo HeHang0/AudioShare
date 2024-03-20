@@ -388,8 +388,7 @@ public class AudioPlayer implements OnActionReceiveListener, IMediaPlayer.Listen
     public void setPosition(int pos){
         if(pos <= 0) return;
         int posReal = pos + 20 + Math.min(50, Math.abs(playingChangedDelay*2));
-        if(posReal < mediaPlayer.getDuration() &&
-                posReal > mediaPlayer.getPosition() + 150) {
+        if(Math.abs(posReal - mediaPlayer.getPosition()) > 150) {
             mediaPlayer.seekTo(posReal);
         }
     }
