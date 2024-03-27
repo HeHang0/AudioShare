@@ -50,6 +50,7 @@ namespace AudioShare
         private readonly string _name = string.Empty;
         private string _id = string.Empty;
         private bool _disposed = false;
+        private bool _retried = false;
         private readonly Dispatcher _dispatcher;
 
         public string Id => _id;
@@ -161,54 +162,57 @@ namespace AudioShare
             _ = Connect();
         }
 
-        public async Task Connect()
+        public async Task Connect(bool retry=false)
         {
             if (Connecting) return;
             _disposed = false;
-            await DisConnect();
+            await DisConnect(false, retry);
             SetConnectStatus(ConnectStatus.Connecting);
             Logger.Info("connect start");
             try
             {
                 tcpClient = new TcpClient();
                 tcpClient.NoDelay = true;
-                if (_isUSB)
+                if (!retry)
                 {
-                    if (!await EnsureDevice(_id))
+                    if (_isUSB)
                     {
-                        throw new Exception("device not ready");
+                        if (!await EnsureDevice(_id))
+                        {
+                            throw new Exception("device not ready");
+                        }
+                        int port = await Utils.GetFreePort();
+                        var device = adbClient.GetDevice(_id);
+                        adbClient.RemoveRemoteForward(device, REMOTE_SOCKET);
+                        adbClient.CreateForward(device, "tcp:" + port, REMOTE_SOCKET, true);
+                        _remoteIP = "127.0.0.1";
+                        _remotePort = port;
                     }
-                    int port = await Utils.GetFreePort();
-                    var device = adbClient.GetDevice(_id);
-                    adbClient.RemoveRemoteForward(device, REMOTE_SOCKET);
-                    adbClient.CreateForward(device, "tcp:" + port, REMOTE_SOCKET, true);
-                    _remoteIP = "127.0.0.1";
-                    _remotePort = port;
-                }
-                else
-                {
-                    string pattern = @"^[\[]?(?<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|([0-9A-Fa-f]{1,4}:){1,7}([0-9A-Fa-f]{1,4}|:))[\]]?(:(?<port>\d+))?$";
-                    var match = Regex.Match(_id, pattern);
-                    if (!match.Success)
+                    else
                     {
-                        MessageBox.Show(Application.Current.MainWindow,
-                            Languages.Language.GetLanguageText("ipParseError"),
-                            Application.Current.MainWindow.Title);
-                        throw new Exception("address error");
+                        string pattern = @"^[\[]?(?<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|([0-9A-Fa-f]{1,4}:){1,7}([0-9A-Fa-f]{1,4}|:))[\]]?(:(?<port>\d+))?$";
+                        var match = Regex.Match(_id, pattern);
+                        if (!match.Success)
+                        {
+                            MessageBox.Show(Application.Current.MainWindow,
+                                Languages.Language.GetLanguageText("ipParseError"),
+                                Application.Current.MainWindow.Title);
+                            throw new Exception("address error");
+                        }
+                        var groupIP = match.Groups["ip"];
+                        var groupPort = match.Groups["port"];
+                        string ip = groupIP.Value;
+                        if (!int.TryParse(groupPort?.Value ?? string.Empty, out int port))
+                        {
+                            port = 80;
+                        }
+                        if (!await EnsureDevice(ip, port))
+                        {
+                            throw new Exception("device not ready");
+                        }
+                        _remoteIP = ip;
+                        _remotePort = port;
                     }
-                    var groupIP = match.Groups["ip"];
-                    var groupPort = match.Groups["port"];
-                    string ip = groupIP.Value;
-                    if(!int.TryParse(groupPort?.Value ?? string.Empty, out int port))
-                    {
-                        port = 80;
-                    }
-                    if (!await EnsureDevice(ip, port))
-                    {
-                        throw new Exception("device not ready");
-                    }
-                    _remoteIP = ip;
-                    _remotePort = port;
                 }
                 await RequestTcp(Command.Stop, force: true);
                 IPAddress ipAddress = IPAddress.Parse(_remoteIP);
@@ -244,6 +248,7 @@ namespace AudioShare
                     ReadAsync(tcpClient.GetStream());
                 }
                 SetConnectStatus(ConnectStatus.Connected);
+                _retried = false;
             }
             catch (Exception ex)
             {
@@ -257,14 +262,14 @@ namespace AudioShare
         {
             try
             {
-                if (stream.CanRead)
+                while (stream.CanRead)
                 {
                     await stream.ReadAsync(_receiveBuffer, 0, _receiveBuffer.Length);
-                    ReadAsync(stream);
                 }
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                // 处理异常
             }
         }
 
@@ -284,7 +289,15 @@ namespace AudioShare
             }
             if (!(await WriteTcp(e.Buffer, e.BytesRecorded, true)))
             {
-                await DisConnect(true);
+                if (_retried)
+                {
+                    await DisConnect(true);
+                }
+                else
+                {
+                    _retried = true;
+                    await Connect(true);
+                }
             }
             lock (writeLock)
             {
@@ -372,13 +385,16 @@ namespace AudioShare
             return false;
         }
 
-        private async Task DisConnect(bool toast=false)
+        private async Task DisConnect(bool toast=false, bool retry = false)
         {
             if (_connectStatus == ConnectStatus.UnConnected) return;
             SetConnectStatus(ConnectStatus.UnConnected, toast);
             Logger.Info("disconnect start");
-            _remoteIP = string.Empty;
-            _remotePort = -1;
+            if (!retry)
+            {
+                _remoteIP = string.Empty;
+                _remotePort = -1;
+            }
             try
             {
                 AudioManager.Stoped -= OnAudioStoped;
