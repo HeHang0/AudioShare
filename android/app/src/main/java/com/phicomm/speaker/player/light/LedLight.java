@@ -21,8 +21,8 @@ public class LedLight {
     }
 
     private static final boolean _supported = Build.MANUFACTURER.equalsIgnoreCase("phicomm");
-    public static boolean supported(){
-        return _supported;
+    public static boolean unsupported(){
+        return !_supported;
     }
 
     public static synchronized void setEnable(boolean enabled){

@@ -442,7 +442,6 @@ public class TcpService extends NotificationService {
             }
         } catch (Exception e) {
             Log.e(TAG, "play audio error: " + e);
-            e.printStackTrace();
         } finally {
             PlayerVisualizer.stopBase();
             try {

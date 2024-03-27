@@ -405,7 +405,22 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
             return;
         }
         Map<String, ?> values = mPreferences.getAll();
-        response.send(new JSONObject(values));
+        Map<String, String> newValues = new HashMap<>();
+        for (Map.Entry<String, ?> entry : values.entrySet()) {
+            if (entry.getKey().startsWith("musiche-") && entry.getValue() instanceof String) {
+                newValues.put(entry.getKey(), (String) entry.getValue());
+            }
+        }
+        MusicItem music = mAudioPlayer.getCurrentMusic();
+        if(music != null){
+            Map<String, Object> musicMap = music.toMap();
+            musicMap.remove("cookie");
+            musicMap.remove("musicU");
+            musicMap.remove("uid");
+            musicMap.remove("csrf");
+            newValues.put("music-current-music", new JSONObject(musicMap).toString());
+        }
+        response.send(new JSONObject(newValues));
     };
     private final HttpServerRequestCallback deleteStorage = (request, response) -> {
         String key = request.getQuery().getString("key");
