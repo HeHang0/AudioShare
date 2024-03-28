@@ -374,8 +374,10 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
                 return "application/javascript; charset=utf-8";
             case "css":
                 return "text/css; charset=utf-8";
-            case "woff":
+            case "woff2":
                 return "font/woff2";
+            case "woff":
+                return "font/woff";
             case "png":
                 return "image/png";
             case "jpg":
@@ -384,6 +386,8 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
                 return "image/svg+xml";
             case "webp":
                 return "image/webp";
+            case "webm":
+                return "video/webm";
         }
         return "text/html";
     }
