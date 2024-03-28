@@ -289,14 +289,14 @@ namespace AudioShare
             }
             if (!(await WriteTcp(e.Buffer, e.BytesRecorded, true)))
             {
-                if (_retried)
-                {
-                    await DisConnect(true);
-                }
-                else
+                if (!_retried && Connected)
                 {
                     _retried = true;
                     await Connect(true);
+                }
+                else
+                {
+                    await DisConnect(true);
                 }
             }
             lock (writeLock)
