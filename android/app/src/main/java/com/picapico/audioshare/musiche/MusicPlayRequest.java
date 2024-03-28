@@ -31,11 +31,9 @@ public class MusicPlayRequest {
                             Objects.equals(musicItem.getId(), music.getId()) &&
                             Objects.equals(musicItem.getType(), music.getType())) {
                         musicPlayRequest.setIndex(i);
-                        playlist.add(music);
                         musicPlayRequest.setMusic(music);
-                    }else {
-                        playlist.add(music);
                     }
+                    playlist.add(music);
                 }
             }
         } catch (Exception e) {

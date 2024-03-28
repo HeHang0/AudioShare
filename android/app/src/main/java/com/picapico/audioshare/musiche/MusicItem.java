@@ -248,12 +248,15 @@ public class MusicItem {
             if(jsonObject.has("name")){
                 musicItem.setName(jsonObject.getString("name"));
             }
-            if(jsonObject.has("largeImage")){
-                musicItem.setImage(jsonObject.getString("largeImage"));
-            }else if(jsonObject.has("mediumImage")){
-                musicItem.setImage(jsonObject.getString("mediumImage"));
-            }else if(jsonObject.has("image")){
-                musicItem.setImage(jsonObject.getString("image"));
+            String largeImage = jsonObject.has("largeImage") ? jsonObject.getString("largeImage") : null;
+            String mediumImage = jsonObject.has("mediumImage") ? jsonObject.getString("mediumImage") : null;
+            String smallImage = jsonObject.has("image") ? jsonObject.getString("image") : null;
+            if(largeImage != null && !largeImage.isEmpty()){
+                musicItem.setImage(largeImage);
+            }else if(mediumImage != null && !mediumImage.isEmpty()){
+                musicItem.setImage(mediumImage);
+            }else if(smallImage != null && !smallImage.isEmpty()){
+                musicItem.setImage(smallImage);
             }
             if(jsonObject.has("singer")){
                 musicItem.setSinger(jsonObject.getString("singer"));

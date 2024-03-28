@@ -418,7 +418,7 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
             musicMap.remove("musicU");
             musicMap.remove("uid");
             musicMap.remove("csrf");
-            newValues.put("music-current-music", new JSONObject(musicMap).toString());
+            newValues.put("musiche-current-music", new JSONObject(musicMap).toString());
         }
         response.send(new JSONObject(newValues));
     };
@@ -441,16 +441,10 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
         }
     };
     private final HttpServerRequestCallback setStorage = (request, response) -> {
-        Object obj = request.getBody().get();
-        if(obj instanceof JSONObject){
-            JSONObject body = (JSONObject) obj;
-            try {
-                String key = body.getString("key");
-                String value = body.getString("value");
-                if(mPreferences != null){
-                    mPreferences.edit().putString(key, value).apply();
-                }
-            }catch (Exception ignore){}
+        String key = request.getQuery().getString("key");
+        String value = request.getBody().get().toString();
+        if(mPreferences != null && key != null && !key.isEmpty()){
+            mPreferences.edit().putString(key, value).apply();
         }
         response.end();
     };
