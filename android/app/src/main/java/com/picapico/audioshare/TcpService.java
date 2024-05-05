@@ -1,11 +1,13 @@
 package com.picapico.audioshare;
 
+import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
@@ -19,6 +21,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -64,6 +67,7 @@ public class TcpService extends NotificationService {
     private final ExecutorService mExecutorService = Executors.newSingleThreadExecutor();
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private HttpServer httpServer;
+    private SharedPreferences mSharedPreferences;
     @Override
     public void onCreate() {
         super.onCreate();
@@ -71,7 +75,10 @@ public class TcpService extends NotificationService {
         Log.i(TAG, "Service on created");
         new Thread(this::startLocalServer).start();
         new Thread(this::startServer).start();
-        this.startHttpServer();
+        mSharedPreferences = getSharedPreferences("app", Context.MODE_PRIVATE);
+        if(mSharedPreferences.getBoolean("http-server", true)){
+            this.startHttpServer();
+        }
         this.startBroadcastTimer();
     }
     @Override
@@ -108,7 +115,7 @@ public class TcpService extends NotificationService {
         } catch (IOException e) {
             Log.e(TAG, "close tcp server error: " + e);
         }
-        httpServer.stop();
+        if(httpServer != null) httpServer.stop();
     }
 
     private byte readHead(InputStream stream) throws IOException {
@@ -142,12 +149,13 @@ public class TcpService extends NotificationService {
         return parseInt(buffer);
     }
 
+    private int lastPCVolume = 1;
     private void processControlStream(byte command, InputStream stream) {
         if(command == 2){
             try {
                 int volume = readInt(stream);
-                volume = maxAudioVolume * volume / 100;
-                setVolume(volume);
+                lastPCVolume = maxAudioVolume * volume / 100;
+                setVolume(lastPCVolume);
             } catch (IOException e) {
                 Log.e(TAG, "read volume error: " + e);
             }
@@ -259,6 +267,7 @@ public class TcpService extends NotificationService {
         }
     }
     private void startHttpServer(){
+        if(httpServer != null) return;
         Log.i(TAG, "prepare http start server");
         int port = NetworkUtils.getFreePort(Build.MANUFACTURER.equalsIgnoreCase("phicomm") ? 8090 : 8080);
         this.setHttpPort(port);
@@ -277,6 +286,7 @@ public class TcpService extends NotificationService {
         this.setMediaSessionCallback(httpServer.getAudioPlayer().getNotificationCallback());
         httpServer.setSharedPreferences(getSharedPreferences("config", Context.MODE_PRIVATE));
         httpServer.setAssetManager(getAssets());
+        httpServer.setVersionName(mVersionName);
     }
     private void startServer(){
         Log.i(TAG, "prepare tcp start server");
@@ -346,6 +356,7 @@ public class TcpService extends NotificationService {
     }
 
     private int httpPort = 8088;
+    private String mVersionName="";
 
     private synchronized void setHttpPort(int httpPort) {
         this.httpPort = httpPort;
@@ -355,6 +366,30 @@ public class TcpService extends NotificationService {
         return httpPort;
     }
 
+    public synchronized boolean getHttpRunning() {
+        return mSharedPreferences.getBoolean("http-server", true) && httpServer != null;
+    }
+
+    @SuppressLint("ApplySharedPref")
+    public synchronized void setHttpRunning(boolean running) {
+        if(running) {
+            mSharedPreferences.edit().putBoolean("http-server", true).apply();
+            startHttpServer();
+        }else {
+            String message = getResources().getString(R.string.musiche_closed) + ", " + getResources().getString(R.string.effective_after_restart);
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+            final Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+            if(intent != null){
+                startActivity(intent);
+            }
+            mSharedPreferences.edit().putBoolean("http-server", false).commit();
+            android.os.Process.killProcess(android.os.Process.myPid());
+        }
+        if(mListener != null){
+            mListener.onMessage();
+        }
+    }
+
     public void setMessageListener(MessageListener listener){
         mListener = listener;
     }
@@ -362,11 +397,11 @@ public class TcpService extends NotificationService {
     public void setAudioManager(AudioManager audioManager){
         mAudioManager = audioManager;
         maxAudioVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        httpServer.setAudioManager(audioManager);
+        if(httpServer != null) httpServer.setAudioManager(audioManager);
     }
-
     public void setVersionName(String versionName){
-        httpServer.setVersionName(versionName);
+        mVersionName = versionName;
+        if(httpServer != null) httpServer.setVersionName(versionName);
     }
 
     private void playAudio(int sampleRateInHz, int channelConfig, int audioEncoding, int bufferSizeInBytes, Closeable closer, InputStream inputStream, OutputStream outputStream){
@@ -391,7 +426,7 @@ public class TcpService extends NotificationService {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 audioAttributes.setFlags(AudioAttributes.FLAG_LOW_LATENCY);
             }
-            httpServer.getAudioPlayer().pause();
+            if(httpServer != null) httpServer.getAudioPlayer().pause();
             mAudioTrack = new AudioTrack(
                     audioAttributes.build(),
                     audioFormat,
@@ -428,7 +463,8 @@ public class TcpService extends NotificationService {
                     Log.w(TAG, "write audio busy");
                     continue;
                 }
-                if(httpServer.getAudioPlayer().isPlaying()) {
+
+                if(httpServer != null && httpServer.getAudioPlayer().isPlaying()) {
                     Log.w(TAG, "write audio playing");
                     continue;
                 }
@@ -436,8 +472,17 @@ public class TcpService extends NotificationService {
                 int finalDataLength = dataLength;
                 setWriting(true);
                 mExecutorService.execute(() -> {
-                    mAudioTrack.write(finalBuffer, 0, finalDataLength);
+                    int code = mAudioTrack.write(finalBuffer, 0, finalDataLength);
+                    mAudioTrack.flush();
                     mHandler.post(() -> setWriting(false));
+                    if(code < 0) {
+                        Log.e(TAG, "write audio data err: " + code);
+                    }
+                    int state = mAudioTrack.getPlayState();
+                    if(state != AudioTrack.PLAYSTATE_PLAYING) {
+                        Log.w(TAG, "write audio state: " + state);
+//                        mAudioTrack.play();
+                    }
                 });
             }
         } catch (Exception e) {
@@ -544,6 +589,9 @@ public class TcpService extends NotificationService {
                         if(mSocketOutputStream != null) {
                             mSocketOutputStream.write(new byte[1]);
                             Log.i(TAG, "send heartbeat");
+                            if(lastPCVolume > 0 && mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC) == 0){
+                                setVolume(lastPCVolume);
+                            }
                         }
                     } catch (IOException e) {
                         Log.e(TAG, "send heartbeat err: " + e);

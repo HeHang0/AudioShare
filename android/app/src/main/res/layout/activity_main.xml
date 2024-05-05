@@ -44,75 +44,52 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:layout_marginBottom="20dp"
+        android:layout_marginBottom="40dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         android:gravity="center"
         android:id="@+id/ipAddress"/>
-
     <LinearLayout
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="25dp"
         android:orientation="horizontal"
-        android:layout_marginTop="30dp"
+        android:layout_marginTop="35dp"
         android:layout_marginEnd="20dp"
-        android:id="@+id/connected"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        android:gravity="end"
+        android:id="@+id/connection"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
         <TextView
+            android:id="@+id/connectionText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="@string/connected"/>
-        <TextView
-            android:layout_width="10dp"
-            android:layout_height="10dp"
-            android:gravity="center"
-            android:layout_marginStart="10dp"
-            android:layout_marginTop="5dp"
-            android:background="@drawable/dot_green"
-            />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="30dp"
-        android:layout_marginEnd="20dp"
-        android:id="@+id/unconnected"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
-        <TextView
+            android:gravity="center" />
+        <androidx.appcompat.widget.SwitchCompat
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="@string/unconnected"/>
-        <TextView
-            android:layout_width="10dp"
-            android:layout_height="10dp"
-            android:gravity="center"
-            android:layout_marginStart="10dp"
-            android:layout_marginTop="5dp"
-            android:background="@drawable/dot_red"
-            />
+            android:layout_height="match_parent"
+            android:id="@+id/connectionSwitch"
+            android:clickable="false"
+            android:gravity="center"/>
     </LinearLayout>
     <LinearLayout
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
+        android:layout_height="25dp"
         android:layout_marginStart="20dp"
+        android:layout_marginTop="35dp"
         android:layout_marginEnd="20dp"
-        android:layout_marginTop="30dp"
         android:orientation="horizontal"
         android:gravity="start"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/unconnected">
-
+        app:layout_constraintEnd_toStartOf="@id/connection">
+        <androidx.appcompat.widget.SwitchCompat
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:id="@+id/managerSwitch"
+            android:gravity="center"/>
         <TextView
-            android:id="@+id/manager"
+            android:id="@+id/managerText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="center" />

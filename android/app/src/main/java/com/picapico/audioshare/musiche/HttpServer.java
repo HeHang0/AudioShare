@@ -45,6 +45,7 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
     AsyncHttpServer mServer;
     AudioPlayer mAudioPlayer;
     List<WebSocket> mWebClients = new ArrayList<>();
+    final Object mWebClientsLock = new Object();
     Map<String, RemoteClient> mRemoteClients = new HashMap<>();
     BroadcastReceiver mBroadcastReceiver;
     SharedPreferences mPreferences;
@@ -55,7 +56,6 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
         mContext = context;
         mAudioPlayer = new AudioPlayer(context);
         initDeviceName();
-        initBroadcastReceiver();
     }
 
     //region Initialization
@@ -107,14 +107,20 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
         }catch (Exception e){
             Log.e(TAG, "start http server error: ", e);
         }
+        initBroadcastReceiver();
         return this;
     }
     public void stop(){
         if(mServer == null) return;
         try {
             mServer.stop();
+            mAudioPlayer.pause();
         }catch (Exception e){
             Log.e(TAG, "stop server error");
+        }
+        if(mBroadcastReceiver != null) {
+            mBroadcastReceiver.stop();
+            mBroadcastReceiver = null;
         }
         mServer = null;
     }
@@ -583,7 +589,6 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
             localClient.setChannel(client.getChannel());
             if(client.getChannel() < 0) {
                 localClient.send(RemoteMessage.of(RemoteMessage.MessageTypePause));
-                localClient.setChannel(AudioPlayer.ChannelTypeNone);
             }else {
                 localClient.send(RemoteMessage.of(RemoteMessage.MessageTypeChannel)
                         .setChannel(client.getChannel()));
@@ -733,13 +738,17 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
 
     //region websocket
     private final AsyncHttpServer.WebSocketRequestCallback websocketHandler = (webSocket, request) -> {
-        mWebClients.add(webSocket);
+        synchronized (mWebClientsLock){
+            mWebClients.add(webSocket);
+        }
         webSocket.send(mAudioPlayer.getStatus().toString());
         webSocket.setClosedCallback(e -> {
             try {
                 if (e != null) Log.e(TAG, "An error occurred", e);
             } finally {
-                mWebClients.remove(webSocket);
+                synchronized (mWebClientsLock){
+                    mWebClients.remove(webSocket);
+                }
             }
         });
     };
@@ -747,11 +756,13 @@ public class HttpServer implements AudioPlayer.OnChangedListener {
     private final AsyncHttpServer.WebSocketRequestCallback serverWebsocketHandler = (webSocket, request) -> this.onRemoteServerSocket(webSocket);
 
     public void sendWSMessage(String message){
-        for (WebSocket socket: mWebClients) {
-            try {
-                socket.send(message);
-            }catch (Exception e){
-                Log.e(TAG, "send websocket msg error", e);
+        synchronized (mWebClientsLock){
+            for (WebSocket socket: mWebClients) {
+                try {
+                    socket.send(message);
+                }catch (Exception e){
+                    Log.e(TAG, "send websocket msg error", e);
+                }
             }
         }
     }

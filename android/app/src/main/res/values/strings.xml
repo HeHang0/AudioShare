@@ -3,4 +3,7 @@
     <string name="title">Audio Share</string>
     <string name="connected">Connected</string>
     <string name="unconnected">NotConnected</string>
+    <string name="musiche">Musiche</string>
+    <string name="musiche_closed">Musiche closed</string>
+    <string name="effective_after_restart">Effective after restart</string>
 </resources>

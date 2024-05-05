@@ -19,10 +19,11 @@ import android.util.Log;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.widget.LinearLayout;
+import android.widget.CompoundButton;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.app.ActivityCompat;
 
 import java.net.Inet6Address;
@@ -34,10 +35,11 @@ public class MainActivity extends AppCompatActivity {
     private TcpService tcpService = null;
     private boolean isBound = false;
     private TextView ipAddress;
-    private TextView manager;
+    private SwitchCompat managerSwitch;
+    private TextView managerText;
     private String versionName;
-    private LinearLayout connectedLayout;
-    private LinearLayout unConnectedLayout;
+    private SwitchCompat connectionSwitch;
+    private TextView connectionText;
     private final TcpService.MessageListener messageListener = () -> {
         setConnectionStatus();
         setListenStatus();
@@ -69,24 +71,31 @@ public class MainActivity extends AppCompatActivity {
         setStatusBarTransparent();
         setVersionName();
         ipAddress = findViewById(R.id.ipAddress);
-        manager = findViewById(R.id.manager);
-        connectedLayout = findViewById(R.id.connected);
-        unConnectedLayout = findViewById(R.id.unconnected);
+        managerSwitch = findViewById(R.id.managerSwitch);
+        managerText = findViewById(R.id.managerText);
+        connectionSwitch = findViewById(R.id.connectionSwitch);
+        connectionText = findViewById(R.id.connectionText);
         Intent intent = new Intent(this, TcpService.class);
         startService(intent);
         bindService(intent, connection, Context.BIND_AUTO_CREATE);
-        manager.setOnClickListener(this::onManagerClick);
+        managerText.setOnClickListener(this::onManagerClick);
         findViewById(R.id.imageView).setOnClickListener(this::onManagerClick);
         ActivityCompat.requestPermissions(this, new String[]{
                 Manifest.permission.INTERNET,
                 Manifest.permission.ACCESS_NETWORK_STATE,
                 Manifest.permission.ACCESS_WIFI_STATE
         }, 1);
+        managerSwitch.setOnClickListener(this::onHttpServerRunningChanged);
+    }
+
+    private void onHttpServerRunningChanged(View v) {
+        if(tcpService == null) return;
+        tcpService.setHttpRunning(managerSwitch.isChecked());
     }
 
     private void onManagerClick(View e){
         try {
-            Uri uri = Uri.parse(manager.getText().toString());
+            Uri uri = Uri.parse(managerText.getText().toString());
             if(uri.isAbsolute()){
                 Intent intent = new Intent(Intent.ACTION_VIEW, uri);
                 startActivity(intent);
@@ -120,8 +129,8 @@ public class MainActivity extends AppCompatActivity {
         if(tcpService == null) return;
         runOnUiThread(() -> {
             boolean playing = tcpService.getPlaying();
-            connectedLayout.setVisibility(playing ? View.VISIBLE : View.GONE);
-            unConnectedLayout.setVisibility(playing ? View.GONE : View.VISIBLE);
+            connectionText.setText(playing ? R.string.connected : R.string.unconnected);
+            connectionSwitch.setChecked(playing);
         });
     }
 
@@ -154,7 +163,13 @@ public class MainActivity extends AppCompatActivity {
             if(httpPort != 80){
                 httpAddress += ":" + httpPort;
             }
-            manager.setText(httpAddress);
+            if(tcpService.getHttpRunning()){
+                managerText.setText(httpAddress);
+                managerSwitch.setChecked(true);
+            }else {
+                managerText.setText(R.string.musiche_closed);
+                managerSwitch.setChecked(false);
+            }
         });
     }
 
