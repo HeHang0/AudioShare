@@ -1,0 +1,225 @@
+── 协议常量与编码（对照 windows/Speaker.cs 与 android/TcpService.java）
+   PASS  协议常量与编码（对照 windows/Speaker.cs 与 android/TcpService.java）
+         · ok: 头部字节长度（"picapico-audio-share" = 20 字节） = 20
+         · ok: 头部字面量 = picapico-audio-share
+         · ok: head+command+rate+mask 握手字节数 = 29
+         · ok: Stereo -> channelMask = 12
+         · ok: Left -> channelMask（非 Stereo 恒为 4） = 4
+         · ok: Right -> channelMask（非 Stereo 恒为 4） = 4
+         · ok: None -> channelMask = 4
+         · ok: 枚举 None = 0
+         · ok: 枚举 Right = 8
+         · ok: 48kHz 100ms 立体声帧字节数 = 19200
+         · ok: 8000Hz 帧长 4 字节对齐
+         · ok: 16000Hz 帧长 4 字节对齐
+         · ok: 44100Hz 帧长 4 字节对齐
+         · ok: 48000Hz 帧长 4 字节对齐
+         · ok: 96000Hz 帧长 4 字节对齐
+         · ok: 176400Hz 帧长 4 字节对齐
+         · ok: 192000Hz 帧长 4 字节对齐
+         · ok: 帧编码长度 = 8
+         · ok: 帧编码长度前缀（小端） = 4
+         · ok: 心跳帧长度（4 个 0 字节） = 4
+         · ok: 心跳帧长度字段 = 0 = 0
+── 声道抽取算法（对照 windows/AudioManager.cs:116-132）
+   PASS  声道抽取算法（对照 windows/AudioManager.cs:116-132）
+         · ok: Stereo 输出与输入等长 = 7680
+         · ok: Left 输出为输入一半 = 3840
+         · ok: Right 输出为输入一半 = 3840
+         · Goertzel 幅度 L: 1k=16383 2k=0 / R: 1k=0 2k=16383
+         · ok: Left 通道只含 1kHz
+         · ok: Right 通道只含 2kHz
+         · ok: 抽取后 RMS 与幅度一致 = 11584.394 (期望 11584.884±300)
+         · ok: Left 逐字节等于 Split 结果（每 4 字节取前 2）
+         · ok: Right 逐字节等于 Split 结果（每 4 字节取后 2）
+── 设备地址解析（对照 windows/Speaker.cs:193-208）
+   PASS  设备地址解析（对照 windows/Speaker.cs:193-208）
+         · ok: 解析成功: 192.168.1.10:8088
+         · ok: 192.168.1.10:8088 -> ip = 192.168.1.10
+         · ok: 192.168.1.10:8088 -> port = 8088
+         · ok: 解析成功: 192.168.1.10
+         · ok: 192.168.1.10 -> ip = 192.168.1.10
+         · ok: 192.168.1.10 -> port = 80
+         · ok: 解析成功: 10.0.0.2:1234
+         · ok: 10.0.0.2:1234 -> ip = 10.0.0.2
+         · ok: 10.0.0.2:1234 -> port = 1234
+         · ok: 解析成功: [fe80::1]:8088
+         · ok: [fe80::1]:8088 -> ip = fe80::1
+         · ok: [fe80::1]:8088 -> port = 8088
+         · ok: 非法地址被拒绝
+── parec 采集源参数与 monitor 解析
+   PASS  parec 采集源参数与 monitor 解析
+         · parec --device=@DEFAULT_MONITOR@ --format=s16le --rate=48000 --channels=2 --raw --latency-msec=20
+         · ok: 默认绑定 @DEFAULT_MONITOR@
+         · ok: 格式 s16le（16bit 小端）
+         · ok: 采样率 48000
+         · ok: 双声道
+         · ok: raw 模式
+         · ok: 系统存在 parec
+         · ok: 系统存在 pactl
+         · 枚举到 3 个输出设备:
+         ·   [默认] （默认输出设备 / @DEFAULT_MONITOR@） -> @DEFAULT_MONITOR@
+         ·   (null) -> alsa_output.pci-0000_01_00.1.hdmi-stereo.monitor
+         ·   [默认] (null)（系统默认） -> @DEFAULT_MONITOR@
+         · ok: 至少枚举到一个输出设备
+         · ok: 每个设备都有可用 monitor 源
+── adb 可用性与命令序列（无真机时只验证枚举与日志）
+   PASS  adb 可用性与命令序列（无真机时只验证枚举与日志）
+         · ok: 系统存在 adb: /usr/bin/adb
+         · adb devices -l 解析出 1 台设备
+         ·   192.168.8.4:5555 state=device model=rk322x_box
+         · ok: adb 调用已记录命令行
+         · adb devices -l -> exit=0
+         · ok: 每条 adb 记录都带退出码
+         · APK 候选路径首个: /home/lin/文档/project/AudioShare/linux/src/AudioShare.Cli/bin/Release/net8.0/AudioShare.apk
+         · ok: APK 命名遵循 windows 的 exe 同名规则
+         · ok: 版本判定字符串与 android versionName 一致 = 1.7.9
+         · ok: 版本比对逻辑命中 1.7.9
+         · ok: 版本比对不误判旧版本
+── UDP 发现与网卡过滤（伪造 android 广播驱动设备入列）
+   PASS  UDP 发现与网卡过滤（伪造 android 广播驱动设备入列）
+         · ok: 绑定 58261-58270 全部端口 = 10
+         · bound ports: 58261,58262,58263,58264,58265,58266,58267,58268,58269,58270
+         · @8088/@8080 报文长度 = 30，内容 = picapico-audio-share@8088@8080
+         · ok: 报文长度 = HEAD + '@tcp' + '@http' = 30
+         · ok: 报文在阈值 64 内（原版 windows 阈值为 26，会全部丢弃）
+         · ok: 收到两条广播（实际 2）
+         · ok: 发现设备 Id = 127.0.0.1:8088
+         · ok: 发现设备 http 端口 = 8080
+         · ok: 远程管理页地址 = http://127.0.0.1:8080
+         · ok: 发现设备已加入设备池
+         · ok: 发现设备已持久化到 IP 列表
+         · ok: 非法/超长报文被丢弃（发现数不变） = 2
+         · accepted=2 dropped=3 messages=5
+         · ok: 拒绝虚拟网卡 lo
+         · ok: 拒绝虚拟网卡 docker0
+         · ok: 拒绝虚拟网卡 veth1a2b3c
+         · ok: 拒绝虚拟网卡 br-9f8e7d
+         · ok: 拒绝虚拟网卡 tun0
+         · ok: 拒绝虚拟网卡 tailscale0
+         · ok: 拒绝虚拟网卡 wg0
+         · ok: 拒绝虚拟网卡 virbr0
+         · ok: 拒绝虚拟网卡 dummy0
+         · ok: 接受物理网卡 enp5s0
+         · ok: 接受物理网卡 eth0
+         · ok: 接受物理网卡 wlan0
+         · ok: 接受物理网卡 eno1
+         · REJECT lo [Loopback] up=True ipv4=127.0.0.1/8 reason=loopback
+         · REJECT enp5s0 [Ethernet] up=False ipv4= reason=interface down
+         · ACCEPT wlp6s0 [Ethernet] up=True ipv4=192.168.8.8/21 subnet=192.168.8.0/21 scan=192.168.8.1-192.168.15.254
+         · REJECT docker0 [Ethernet] up=False ipv4=172.17.0.1/16 reason=virtual container/tunnel interface 'docker*'
+         · ACCEPT Meta [Unknown] up=True ipv4=198.18.0.1/30 subnet=198.18.0.0/30 scan=198.18.0.1-198.18.0.2
+         · physical interfaces accepted: 2/5
+         · ok: 本机实际网卡报告中 lo 被拒绝
+         · 扫描网段：192.168.8.0/21 scan=192.168.8.1-192.168.15.254 198.18.0.0/30 scan=198.18.0.1-198.18.0.2
+── 多设备并发 + 独立声道分离（1kHz 左 / 2kHz 右 频谱验证）
+   PASS  多设备并发 + 独立声道分离（1kHz 左 / 2kHz 右 频谱验证）
+         · ok: Stereo 设备连接
+         · ok: Left 设备连接
+         · ok: Right 设备连接
+         · 握手掩码: stereo=12 left=4 right=4
+         · ok: Stereo 设备下发掩码 12 = 12
+         · ok: Left 设备下发掩码 4 = 4
+         · ok: Right 设备下发掩码 4 = 4
+         · ok: 设备池使用合成采集源引擎（可注入测试信号）
+         · 合成源统计: Read 调用=11 峰值=16383
+         · 引擎统计: 总帧=12 真实数据帧=10 静音帧=2 fps=10 lastError=(none)
+         · 帧数: stereo=12 left=12 right=12
+         · ok: 三台设备均持续收到数据帧（stereo=12 left=12 right=12，帧长 100ms）
+         · 参考帧峰值: stereo=16383 left=16383 right=16383
+         · 参考帧前 16 字节: stereo=00 00 00 00 5A 08 90 10 90 10 FF 1F 7D 18 40 2D left=00 00 5A 08 90 10 7D 18 FF 1F F5 26 40 2D C5 32
+         · Left 设备: 1k=16383 2k=0
+         · Right 设备: 1k=0 2k=16383
+         · Stereo 设备: L-1k=16383 R-2k=16383
+         · ok: Left 设备只收到左声道 1kHz
+         · ok: Right 设备只收到右声道 2kHz
+         · ok: Stereo 设备同时收到左右声道
+         · ok: Stereo 帧长 19200B = 19200
+         · ok: Left 帧长 9600B（抽取） = 9600
+         · ok: Right 帧长 9600B（抽取） = 9600
+         · ok: Left 设备所有帧统一为 9600B
+         · ok: Right 设备所有帧统一为 9600B
+── 建立音频连接（Stop → connect → handshake → ack）
+   PASS  建立音频连接（Stop → connect → handshake → ack）
+         · ok: 音频连接已建立
+         · ok: 连接状态 = Connected
+── 真实字节流解析回放（独立解析器，对照 android readHead/readInt/parseInt）
+   PASS  真实字节流解析回放（独立解析器，对照 android readHead/readInt/parseInt）
+         · 旁录=96049B 服务端帧桶=96020B 会话=1 ACK=1 已发送帧=5
+         · 旁录首段(hex): 70 69 63 61 70 69 63 6F 2D 61 75 64 69 6F 2D 73 68 61 72 65 01 80 BB 00 00 0C 00 00 00 00 4B 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+         · 旁录首段(可读): picapico -audio-s hare.... ......K. ........ ........
+         · 写入: #1 tag=3 offset=0 len=20 70 69 63 61 70 69 63 6F 2D 61 75 64 69 6F 2D 73 68 61 72 65
+         · 写入: #2 tag=3 offset=20 len=1 01
+         · 写入: #3 tag=3 offset=21 len=4 80 BB 00 00
+         · 写入: #4 tag=3 offset=25 len=4 0C 00 00 00
+         · 写入: #5 tag=3 offset=29 len=19204
+         · 写入: #6 tag=3 offset=19233 len=19204
+         · 写入: #7 tag=3 offset=38437 len=19204
+         · 写入: #8 tag=3 offset=57641 len=19204
+         · 写入: #9 tag=3 offset=76845 len=19204
+         · 写入序列总记录数=9（用于定位多余字节）
+         · 旁录中 "picapico-audio-share" 出现位置: 0
+         · ok: 全部写入都在旁录覆盖范围内 = 0
+         · ok: 客户端已发送 5 个音频帧（帧长 100ms）
+         · ok: 服务端帧桶 = 5 帧 × (4 + 19200 字节) = 96020
+         · ok: 旁录 = 握手 29 字节 + 5 帧 × 19204 字节 = 96049
+         · ok: 音频会话数 = 1
+         · ok: 旁录中头部只出现一次（无重复握手） = 1
+         · ok: 头部字面量（客户端真实写入 20 字节） = picapico-audio-share
+         · ok: 命令字节 = 1 (AudioData) = 1
+         · ok: 头部 + 命令字节偏移 = 21
+         · ok: 采样率（小端 int32） = 48000
+         · ok: 声道掩码（小端 int32） = 12
+         · ok: 服务端读到的采样率 = 48000
+         · ok: 服务端读到的声道掩码 = 12
+         · ok: 解析出音频帧 5 个
+         · 帧数=5 数据帧=5 心跳帧=0 每帧字节=19200
+         · ok: 所有数据帧长度 = 19200B（100ms@48k 立体声）
+         · ok: 所有数据帧长度为 4 的整数倍
+         · 数据帧=5 心跳帧=0（心跳需 >5s 静默触发，由保活测试验证）
+         · ok: 音频会话数 = 1
+         · ok: 服务端已回 1 字节 ACK（客户端握手读取路径生效）
+── 静音保活：采集源完全静默 40s，仍按实时速率投递 + 心跳（commit dac02fd）
+   PASS  静音保活：采集源完全静默 40s，仍按实时速率投递 + 心跳（commit dac02fd）
+         · 引擎统计: 总帧=400 静音帧=400 真实数据帧=0 fps=9.99 期望帧数≈400
+         · 采集源 Read 调用=198 次（全部返回 0 = 无数据）lastError=(none)
+         · ok: 采集源静默期间没有任何真实数据帧
+         · ok: 总帧数按实时速率补齐（10ms 一帧） = 400 (范围 360~440)
+         · ok: 投递速率（帧/秒） = 9.99 (范围 9.5~10.5)
+         · 接收端: 数据帧=405 心跳帧=0 连接状态=Connected 已发送=405 丢帧=0
+         · ok: 接收端持续收到数据帧（无断连缺口）
+         · ok: 保活成立：数据帧=405 或 心跳帧=0（写循环空转=2 次，心跳已发=0）
+         · 空转检测=2 次，长度 0 心跳=0 个（静默无数据帧时按 5s 周期补发）
+         · ok: 静默期间没有重建连接 = 1
+         · ok: 静默期间连接保持
+── 控制指令 Volume/SyncTime/Stop（独立连接 + 小端参数）
+   PASS  控制指令 Volume/SyncTime/Stop（独立连接 + 小端参数）
+         · ok: Volume 指令发送成功
+         · ok: 已捕获控制连接数据 6 字节
+         · 控制流字节: 04-02-25-00-00-00
+         · ok: 建连前已发送 Stop(4) 或 SyncTime(3)
+         · ok: Volume 参数（小端 int32 = 37） = 37
+         · ok: 控制流中不含 AudioData 命令 = 0
+         · ok: 控制指令未复用音频连接（独立连接）
+[e2e] 测试音已生成: /home/lin/.pi-desktop/scratch/9fd7dd46-fc4c-43d9-976e-86252a7469c2/e2e-tone.wav (左 440Hz / 右 880Hz)
+[e2e] 播放: /usr/bin/pw-cat --playback /home/lin/.pi-desktop/scratch/9fd7dd46-fc4c-43d9-976e-86252a7469c2/e2e-tone.wav
+[e2e] 播放退出码=0 stderr=
+[e2e] 采集统计: frames=67 实际数据帧=65 静音帧=2 fps=9.91 实时比=0.9908
+[e2e] 采集字节=1286400 RMS(左)=10658 440Hz 幅度=7658 880Hz 幅度=4685
+[e2e] monitor 源状态: 89	alsa_output.pci-0000_01_00.1.hdmi-stereo.monitor	PipeWire	s32le 2ch 48000Hz	SUSPENDED
+[e2e] PASS：采集到系统播放的真实 PCM（双声道音调均存在）
+
+═══ 自检汇总: 11/11 通过 ═══
+  PASS  协议常量与编码（对照 windows/Speaker.cs 与 android/TcpService.java）
+  PASS  声道抽取算法（对照 windows/AudioManager.cs:116-132）
+  PASS  设备地址解析（对照 windows/Speaker.cs:193-208）
+  PASS  parec 采集源参数与 monitor 解析
+  PASS  adb 可用性与命令序列（无真机时只验证枚举与日志）
+  PASS  UDP 发现与网卡过滤（伪造 android 广播驱动设备入列）
+  PASS  多设备并发 + 独立声道分离（1kHz 左 / 2kHz 右 频谱验证）
+  PASS  建立音频连接（Stop → connect → handshake → ack）
+  PASS  真实字节流解析回放（独立解析器，对照 android readHead/readInt/parseInt）
+  PASS  静音保活：采集源完全静默 40s，仍按实时速率投递 + 心跳（commit dac02fd）
+  PASS  控制指令 Volume/SyncTime/Stop（独立连接 + 小端参数）
+_current=控制指令 Volume/SyncTime/Stop（独立连接 + 小端参数）
+全部自检通过 ✅

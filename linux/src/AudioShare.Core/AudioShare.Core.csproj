@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AssemblyName>AudioShare.Core</AssemblyName>
+    <RootNamespace>AudioShare</RootNamespace>
+    <Version>1.7.19</Version>
+    <Authors>AudioShare Linux Port</Authors>
+    <Description>AudioShare Linux core: PipeWire/PulseAudio monitor capture, protocol compatible with the Android client</Description>
+  </PropertyGroup>
+
+</Project>

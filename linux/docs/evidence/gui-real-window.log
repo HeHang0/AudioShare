@@ -1,0 +1,11 @@
+[2026-10-14 20:56:00.550] [INFO] AudioShare GUI starting: args=
+[2026-10-14 20:56:00.999] [INFO] tray icon created
+[2026-10-14 20:56:01.236] [INFO] device pool starting
+[2026-10-14 20:56:01.238] [INFO] discovery listening on ports: 58261,58262,58263,58264,58265,58266,58267,58268,58269,58270
+[2026-10-14 20:56:01.538] [INFO] audio devices refreshed: 3
+[2026-10-14 20:56:01.542] [INFO] exec: adb start-server
+[2026-10-14 20:56:01.547] [INFO] exit=0 stdout=
+[2026-10-14 20:56:01.549] [INFO] exec: adb devices -l
+[2026-10-14 20:56:01.552] [INFO] exit=0 stdout=List of devices attached
+[2026-10-14 20:56:01.553] [INFO] adb devices online: 0
+[2026-10-14 20:56:04.254] [INFO] system volume changed: 40

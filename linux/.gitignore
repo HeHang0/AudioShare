@@ -1,0 +1,6 @@
+# 构建产物（源码仓库不提交）
+bin/
+obj/
+publish/
+dist/
+*.user

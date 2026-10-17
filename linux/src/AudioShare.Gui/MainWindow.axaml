@@ -1,0 +1,32 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gui="clr-namespace:AudioShare.Gui"
+        x:Class="AudioShare.Gui.MainWindow"
+        Title="音频同享 1.7.19"
+        Icon="/Assets/audioshare.ico"
+        Width="500" Height="470"
+        MinWidth="320" MinHeight="360"
+        CanResize="False"
+        SystemDecorations="None"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource SystemRegionBrush}"
+        BorderThickness="1"
+        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+  <DockPanel>
+    <!-- 唯一的自绘标题栏（系统装饰已在 Window 上禁用）：
+         按住空白处可拖动窗口；✕ 最小化到托盘，退出走托盘菜单 -->
+    <Border DockPanel.Dock="Top" Height="36" Background="Transparent"
+            PointerPressed="OnTitleBarPointerPressed">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0" Spacing="8" IsHitTestVisible="False">
+          <Image Source="/Assets/audioshare.png" Width="18" Height="18" />
+          <TextBlock Text="音频同享 1.7.19" FontWeight="SemiBold" VerticalAlignment="Center" />
+        </StackPanel>
+        <Button Grid.Column="1" Content="✕" Padding="14,2"
+                ToolTip.Tip="最小化到托盘（音频转发继续）；退出请用托盘菜单"
+                Click="OnMinimizeToTray" />
+      </Grid>
+    </Border>
+    <gui:MainView />
+  </DockPanel>
+</Window>

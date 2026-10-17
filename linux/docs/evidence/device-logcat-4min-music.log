@@ -1,0 +1,59 @@
+--------- beginning of main
+I/AudioShareService( 1615): client connected: 0
+I/AudioShareService( 1615): client connected: 0
+--------- beginning of system
+I/AudioShareService( 1615): client connected: 4
+I/AudioShareService( 1615): client connected: 1
+I/AudioShareService( 1615): set music volume 0
+I/AudioShareService( 1615): play audio ready to read
+I/AudioShareService( 1615): client connected: 2
+I/AudioShareService( 1615): set music volume 5
+I/AudioShareService( 1615): client connected: 3
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+W/AudioShareService( 1615): write audio busy
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+W/AudioShareService( 1615): write audio busy
+W/AudioShareService( 1615): write audio busy
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+I/AudioShareService( 1615): send heartbeat
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+I/AudioShareService( 1615): send heartbeat
+I/AudioShareService( 1615): send heartbeat
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy

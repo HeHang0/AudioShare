@@ -1,0 +1,20 @@
+--------- beginning of main
+--------- beginning of system
+I/AudioShareService( 1615): local server client accept
+I/AudioShareService( 1615): client connected: 4
+I/AudioShareService( 1615): local server client accept
+I/AudioShareService( 1615): client connected: 1
+I/AudioShareService( 1615): set music volume 0
+I/AudioShareService( 1615): play audio ready to read
+I/AudioShareService( 1615): local server client accept
+I/AudioShareService( 1615): client connected: 2
+I/AudioShareService( 1615): set music volume 6
+I/AudioShareService( 1615): local server client accept
+I/AudioShareService( 1615): client connected: 3
+I/AudioShareService( 1615): send heartbeat
+I/AudioShareService( 1615): send heartbeat
+W/AudioShareService( 1615): write audio busy
+W/AudioShareService( 1615): write audio busy
+I/AudioShareService( 1615): send heartbeat
+E/AudioShareService( 1615): stop output stream error: java.io.IOException: socket closed
+I/AudioShareService( 1615): play audio ended

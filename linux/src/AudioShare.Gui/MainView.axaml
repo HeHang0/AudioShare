@@ -1,0 +1,124 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="AudioShare.Gui.MainView">
+  <Border Padding="0,4,0,0">
+    <ScrollViewer>
+      <!-- 内边距放在内容的 Margin 上：ScrollViewer.Padding 在出现垂直滚动条时
+           可能不参与测量，导致内容按窗口全宽布局、右侧控件被窗口边缘裁掉 -->
+      <StackPanel Margin="20,8,20,0" Spacing="10">
+        <!-- 顶部一行：全局开关 + 连接状态（右） -->
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+          <TextBlock Text="开机启动" VerticalAlignment="Center" />
+          <ToggleSwitch Grid.Column="1" Margin="6,0,0,0" OnContent="" OffContent=""
+                        IsChecked="{Binding IsStartup, Mode=TwoWay}" />
+          <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
+            <Ellipse Width="10" Height="10" Fill="#2E7D32" VerticalAlignment="Center" IsVisible="{Binding AnyConnected}" />
+            <TextBlock Text="已连接" IsVisible="{Binding AnyConnected}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding ConnectedCountText}" IsVisible="{Binding AnyConnected}" VerticalAlignment="Center" />
+            <Ellipse Width="10" Height="10" Fill="#C62828" VerticalAlignment="Center" IsVisible="{Binding NoneConnected}" />
+            <TextBlock Text="未连接" IsVisible="{Binding NoneConnected}" VerticalAlignment="Center" />
+          </StackPanel>
+        </Grid>
+
+        <Border Height="1" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Opacity="0.5" />
+
+        <!-- 音频设备 + 采样率 + 刷新（一次刷新音频设备与播放设备列表） -->
+        <Grid ColumnDefinitions="Auto,*,104,Auto">
+          <TextBlock Text="音频设备：" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="1" Margin="8,0,0,0" HorizontalAlignment="Stretch"
+                    ItemsSource="{Binding AudioDevices}" SelectedItem="{Binding AudioSelected, Mode=TwoWay}"
+                    ToolTip.Tip="系统输出设备（采集其 monitor 源）">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Name}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <ComboBox Grid.Column="2" Margin="8,0,0,0" ItemsSource="{Binding SampleRates}"
+                    SelectedItem="{Binding SampleRateChoice, Mode=TwoWay}" ToolTip.Tip="采样率">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Name}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <Button Grid.Column="3" Content="刷新" Margin="8,0,0,0" MinWidth="56"
+                  VerticalAlignment="Center" ToolTip.Tip="刷新音频设备与播放设备列表"
+                  Command="{Binding RefreshAllCommand}" />
+        </Grid>
+
+        <!-- 播放设备区：标题行 + 设备列表 + 添加 -->
+        <StackPanel Spacing="6">
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <TextBlock Text="播放设备：" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6">
+              <TextBlock Text="USB" VerticalAlignment="Center" ToolTip.Tip="USB：通过 adb 连接；关闭则走 Wi-Fi" />
+              <ToggleSwitch IsChecked="{Binding IsUSB, Mode=TwoWay}" OnContent="" OffContent="" />
+            </StackPanel>
+            <TextBlock Grid.Column="2" Text="刷新中…" VerticalAlignment="Center" IsVisible="{Binding AdbLoading}" Margin="8,0,0,0" />
+          </Grid>
+
+          <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1"
+                  CornerRadius="4" MaxHeight="150">
+            <ScrollViewer>
+              <ItemsControl ItemsSource="{Binding Speakers}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <!-- 双击设备行可打开安卓端远程管理页（隐藏入口，不占按钮） -->
+                    <Border Padding="6" Margin="2" DoubleTapped="OnOpenRemotePage"
+                            ToolTip.Tip="双击打开远程管理页">
+                      <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*,90,Auto">
+                          <TextBox Text="{Binding Display, Mode=TwoWay}" IsReadOnly="{Binding IdReadOnly}" />
+                          <ComboBox Grid.Column="1" Margin="6,0,0,0" ItemsSource="{Binding Channels}"
+                                    SelectedItem="{Binding ChannelChoice, Mode=TwoWay}"
+                                    IsEnabled="{Binding ChannelEnabled}">
+                            <ComboBox.ItemTemplate>
+                              <DataTemplate>
+                                <TextBlock Text="{Binding Name}" />
+                              </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                          </ComboBox>
+                          <Button Grid.Column="2" Content="✕" Margin="6,0,0,0" Padding="8,2" ToolTip.Tip="移除设备"
+                                  IsVisible="{Binding RemoveVisible}" Click="OnRemoveSpeaker" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto">
+                          <TextBlock Text="{Binding StatusDetail}" FontSize="12" Opacity="0.8" VerticalAlignment="Center" />
+                          <Button Grid.Column="1" Content="{Binding ActionText}" Margin="6,0,0,0" MinWidth="56"
+                                  IsVisible="{Binding ShowActionButton}" Click="OnToggleConnect" />
+                          <ProgressBar Grid.Column="1" IsIndeterminate="True" Width="80" Height="6" Margin="6,0,0,0"
+                                       IsVisible="{Binding Connecting}" />
+                        </Grid>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </Border>
+
+          <!-- Wi-Fi：手动输入 IP / 端口 + 添加（输入则添加该 IP，留空则按网段自动添加下一台） -->
+          <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsIP}">
+            <TextBox Watermark="192.168.1.10 或 192.168.1.10:8088（默认端口 8088）"
+                     Text="{Binding NewIp, Mode=TwoWay}" />
+            <Button Grid.Column="1" Content="添加" Margin="6,0,0,0"
+                    ToolTip.Tip="输入 IP 则添加该设备；留空则按本机物理网段自动添加下一台（对应 windows 的添加按钮）"
+                    Click="OnAddSpeaker" />
+          </Grid>
+        </StackPanel>
+
+        <!-- 音量 + 跟随系统 -->
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+          <TextBlock Text="音量：" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="{Binding Volume}" Width="30" TextAlignment="Center" VerticalAlignment="Center" />
+          <Slider Grid.Column="2" Minimum="0" Maximum="100" Value="{Binding Volume, Mode=TwoWay}"
+                  IsEnabled="{Binding VolumeCustom}" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="3" Text="跟随系统" Margin="8,0,0,0" VerticalAlignment="Center" />
+          <ToggleSwitch Grid.Column="4" IsChecked="{Binding VolumeFollowSystem, Mode=TwoWay}" OnContent="" OffContent="" />
+        </Grid>
+
+        <TextBlock Text="{Binding StatusLine}" FontSize="11" Opacity="0.7" TextWrapping="Wrap" />
+      </StackPanel>
+    </ScrollViewer>
+  </Border>
+</UserControl>
